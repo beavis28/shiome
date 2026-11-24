@@ -194,12 +194,25 @@ export interface MacroPayload {
   asOf: string;
 }
 
-/** 相談チャットで表示するグラフ */
+/** 相談チャットで表示するグラフ（Chart.js / three.js で描画） */
+export type ChartKind = 'bar' | 'hbar' | 'line' | 'area' | 'doughnut' | 'scatter' | 'bubble' | 'radar' | 'scatter3d';
+export interface ChartPoint {
+  label: string;
+  x: number;
+  y: number;
+  z?: number;
+  r?: number; // bubble の大きさ（元の値。描画時に半径へ変換）
+  group?: string;
+}
 export interface ChartSpec {
-  kind: 'bar' | 'line';
+  kind: ChartKind;
   title: string;
   unit: string;
-  labels: string[];
-  series: { name: string; values: (number | null)[] }[];
+  labels?: string[];
+  series?: { name: string; values: (number | null)[] }[];
+  points?: ChartPoint[];
+  xTitle?: string;
+  yTitle?: string;
+  zTitle?: string;
   source?: string;
 }

@@ -52,15 +52,23 @@ const SEARCH_TOOL: Anthropic.Beta.BetaTool = {
 
 const CHART_TOOL: Anthropic.Beta.BetaTool = {
   name: 'show_chart',
-  description:
-    'Display a chart to the user inside your answer (the chart appears where you call it). Use it when numbers are easier to grasp visually: comparing a metric across stocks or indicators (bar), or showing a trend over time (line). Only plot numbers that come from the dashboard data or from search results / tool outputs in this conversation; never invent values. Up to 4 series, up to 40 labels.',
+  description: `Display an interactive chart inside your answer (it appears where you call it). Rendered with Chart.js, or three.js for 3D.
+Pick the kind by the question:
+- bar / hbar: compare one or a few metrics across stocks (hbar when labels are long or there are many). labels + series.
+- line / area: change over time. labels = dates, series = one per stock/indicator.
+- doughnut: parts of a whole (max 6 slices; share of market cap, revenue mix). labels + one series.
+- radar: profile of 2-4 stocks across 4-8 metrics already on a common scale (e.g. 0-100 scores or percentiles). labels = metrics.
+- scatter: relationship between two metrics for several stocks (e.g. forward P/E vs revenue growth). points with x, y, label.
+- bubble: like scatter plus size (e.g. size = market cap). points with x, y, r, label.
+- scatter3d: three metrics at once in an interactive 3D view the user can rotate (e.g. P/E, growth, margin; size optional via r). Use only when a third dimension really adds insight.
+Never mix two units on one axis. Only plot numbers from the dashboard data, search results or tool outputs in this conversation; never invent values.`,
   input_schema: {
     type: 'object',
     properties: {
-      kind: { type: 'string', enum: ['bar', 'line'] },
+      kind: { type: 'string', enum: ['bar', 'hbar', 'line', 'area', 'doughnut', 'scatter', 'bubble', 'radar', 'scatter3d'] },
       title: { type: 'string', description: 'Chart title in Japanese' },
       unit: { type: 'string', description: 'Unit of the values, e.g. "%", "倍", "ドル", "億ドル"' },
-      labels: { type: 'array', items: { type: 'string' }, description: 'Categories (bar) or x-axis points such as dates (line)' },
+      labels: { type: 'array', items: { type: 'string' }, description: 'Categories or dates (bar, hbar, line, area, doughnut, radar)' },
       series: {
         type: 'array',
         items: {
@@ -69,11 +77,31 @@ const CHART_TOOL: Anthropic.Beta.BetaTool = {
           required: ['name', 'values'],
           additionalProperties: false,
         },
-        description: 'Each series has one value per label (null if unknown)',
+        description: 'One value per label (bar, hbar, line, area, doughnut, radar). Max 6 series.',
       },
+      points: {
+        type: 'array',
+        items: {
+          type: 'object',
+          properties: {
+            label: { type: 'string' },
+            x: { type: 'number' },
+            y: { type: 'number' },
+            z: { type: 'number' },
+            r: { type: 'number', description: 'Size value (bubble, optional for scatter3d), e.g. market cap in billions' },
+            group: { type: 'string', description: 'Optional group such as sector' },
+          },
+          required: ['label', 'x', 'y'],
+          additionalProperties: false,
+        },
+        description: 'Data points (scatter, bubble, scatter3d). Max 60.',
+      },
+      xTitle: { type: 'string' },
+      yTitle: { type: 'string' },
+      zTitle: { type: 'string' },
       source: { type: 'string', description: 'Where the numbers come from, e.g. "画面のデータ (Yahoo Finance)" or "CNBC 11/3"' },
     },
-    required: ['kind', 'title', 'unit', 'labels', 'series'],
+    required: ['kind', 'title', 'unit'],
     additionalProperties: false,
   },
   eager_input_streaming: true,
@@ -99,7 +127,8 @@ const PRICE_TOOL: Anthropic.Beta.BetaTool = {
 const VISUAL_RULES = `
 
 ## 図や表で示す
-- 数字を比べるとき・推移を見せるときは、show_chart（棒グラフ・折れ線）や show_price_comparison（株価の比較）で図を出してください。1 回の回答で図は 2 つまでにします。
+- 数字を比べるとき・推移や関係を見せるときは、show_chart（棒・折れ線・面・ドーナツ・レーダー・散布図・バブル・3D 散布図）や show_price_comparison（株価の比較）で図を出してください。質問に合う種類を選び、1 回の回答で図は 2 つまでにします。
+- 3D 散布図は、3 つの指標の関係を同時に見る意味があるときだけ使います（ユーザーはドラッグで回せます）。
 - 図にする数字は、画面のデータ・検索結果・ツールの結果にあるものだけを使い、単位と出典を必ず付けてください。
 - 少ない項目の比較は Markdown の表（| 区切り）でも構いません。
 - 図を出したあとは、図から読み取れることを短く説明してください。`;
@@ -107,20 +136,46 @@ const VISUAL_RULES = `
 const RANGE_DAYS = { '1M': 21, '3M': 63, '6M': 126, '1Y': 252 } as const;
 const SYMBOL_RE = /^[A-Z]{1,5}([.-][A-Z]{1,2})?$/;
 
+const KINDS = ['bar', 'hbar', 'line', 'area', 'doughnut', 'scatter', 'bubble', 'radar', 'scatter3d'] as const;
+const fin = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? v : undefined);
+const str = (v: unknown, n: number) => (typeof v === 'string' && v.trim() ? v.slice(0, n) : undefined);
+
 function parseChart(raw: unknown): ChartSpec | null {
   if (!raw || typeof raw !== 'object') return null;
   const o = raw as Record<string, unknown>;
-  if ((o.kind !== 'bar' && o.kind !== 'line') || typeof o.title !== 'string' || !Array.isArray(o.labels) || !Array.isArray(o.series)) return null;
-  const labels = o.labels.map(String).slice(0, 40);
-  const series = (o.series as Record<string, unknown>[])
-    .slice(0, 4)
+  const kind = KINDS.find((k) => k === o.kind);
+  if (!kind || typeof o.title !== 'string') return null;
+  const base = {
+    kind,
+    title: o.title.slice(0, 120),
+    unit: String(o.unit ?? '').slice(0, 20),
+    xTitle: str(o.xTitle, 40),
+    yTitle: str(o.yTitle, 40),
+    zTitle: str(o.zTitle, 40),
+    source: str(o.source, 200),
+  };
+  if (kind === 'scatter' || kind === 'bubble' || kind === 'scatter3d') {
+    const points = (Array.isArray(o.points) ? (o.points as Record<string, unknown>[]) : [])
+      .slice(0, 60)
+      .flatMap((p) => {
+        const x = fin(p?.x);
+        const y = fin(p?.y);
+        const z = fin(p?.z);
+        if (x === undefined || y === undefined || (kind === 'scatter3d' && z === undefined)) return [];
+        return [{ label: String(p.label ?? '').slice(0, 30), x, y, z, r: fin(p.r), group: str(p.group, 30) }];
+      });
+    return points.length ? { ...base, points } : null;
+  }
+  const labels = (Array.isArray(o.labels) ? o.labels : []).map(String).slice(0, kind === 'doughnut' ? 8 : 60);
+  const series = (Array.isArray(o.series) ? (o.series as Record<string, unknown>[]) : [])
+    .slice(0, kind === 'doughnut' ? 1 : 6)
     .map((x) => ({
-      name: String(x?.name ?? ''),
-      values: Array.isArray(x?.values) ? (x.values as unknown[]).slice(0, labels.length).map((v) => (typeof v === 'number' && Number.isFinite(v) ? v : null)) : [],
+      name: String(x?.name ?? '').slice(0, 40),
+      values: Array.isArray(x?.values) ? (x.values as unknown[]).slice(0, labels.length).map((v) => fin(v) ?? null) : [],
     }))
     .filter((x) => x.values.length);
   if (!labels.length || !series.length) return null;
-  return { kind: o.kind, title: o.title.slice(0, 120), unit: String(o.unit ?? '').slice(0, 20), labels, series, source: typeof o.source === 'string' ? o.source.slice(0, 200) : undefined };
+  return { ...base, labels, series };
 }
 
 async function history(symbol: string) {
