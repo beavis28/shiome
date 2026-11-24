@@ -6,13 +6,19 @@
 </p>
 
 <p align="center">
-  A one-screen US stock dashboard: watchlist, analyst targets, technicals, earnings dates, the economic calendar, news and an AI explainer, side by side.<br>
-  米国株のウォッチリストを、目標価格・テクニカル・決算日・経済指標・ニュースと一緒に 1 画面で見るダッシュボード。
+  A one-screen US stock dashboard: watchlist, analyst targets, technicals, earnings, a sector heatmap, rates / commodities / FX, the economic calendar, news, live business TV and an AI explainer that can search the web and draw charts.<br>
+  米国株のウォッチリストを、目標価格・テクニカル・決算日・業界ヒートマップ・金利/商品/為替・経済指標・ニュース・経済ニュースのライブ TV と一緒に 1 画面で。ウェブ検索や図で答える AI 相談付き。
 </p>
 
 <p align="center"><a href="#日本語">日本語</a> · <a href="#english">English</a></p>
 
-![Shiome screenshot](docs/screenshot.png)
+![Shiome — watchlist and detail](docs/detail.jpg)
+
+| Sector heatmap | Compare valuations |
+| --- | --- |
+| ![Sector heatmap](docs/heatmap.jpg) | ![Compare PER, PSR, market cap](docs/compare.jpg) |
+| **Rates, commodities, FX, world indices, US indicators** | **AI chat with charts** |
+| ![Markets](docs/macro.jpg) | ![AI chat](docs/chat.jpg) |
 
 > [!WARNING]
 > **For information only. Not investment advice.** Prices can be delayed or wrong. Shiome does not recommend buying or selling anything.
@@ -34,9 +40,13 @@
   - Candlestick chart with SMA 20/50/200, Bollinger Bands, RSI and MACD
   - Badges for overbought/oversold RSI, MACD crosses, Bollinger position and trend
   - Next earnings date
+- **Compare stocks** — pick stocks and compare up to four metrics as bar charts (forward / trailing P/E, P/S, P/B, EV/EBITDA, PEG, market cap, revenue growth, margins, ROE, dividend yield, beta), with a median line and a sortable table.
+- **Sector heatmap** — about 120 large US stocks (or your watchlist) grouped by sector, sized by market cap and colored by 1-day, 50-day-average or 52-week change.
+- **Rates, commodities, FX** — a market strip under the header, plus a view with US indices and VIX, world indices, Treasury yields with a yield curve, oil, gold, copper, the dollar, FX pairs and crypto (3-month sparklines), and the latest US economic releases (CPI, PCE, jobs, GDP, …) from FRED.
 - **Economic calendar** — CPI, jobs report, PCE, GDP, PPI, retail sales (from FRED) and FOMC decisions, shown in your local time together with your watchlist's earnings dates.
 - **News** for the selected stock.
-- **Ask about the screen** — a chat panel sends what you are looking at to Claude, which explains the data. It is instructed never to give buy/sell recommendations, price targets or personal advice.
+- **Live business TV** — a draggable mini player that expands to a large view: Bloomberg Television, Yahoo Finance, NHK WORLD-JAPAN, Sky News and DW News (official YouTube live streams).
+- **Ask AI about the screen** — Claude explains what you are looking at, searches the web with **Exa and Tavily** together when it needs fresh information (with sources), and answers with **charts** (Chart.js: bar, line, area, doughnut, radar, scatter, bubble; three.js: rotatable 3D scatter) and tables. It is instructed never to give buy/sell recommendations, price targets or personal advice.
 - **Auto refresh** — every 20 seconds while the US market (including pre/post) is open, every 5 minutes otherwise.
 
 ### Quick start
@@ -54,6 +64,8 @@ Open <http://localhost:5180>. With no keys at all, Shiome still works using Yaho
 | `FMP_API_KEY` | [Financial Modeling Prep](https://site.financialmodelingprep.com/developer/docs): daily prices, analyst targets, earnings dates, ticker validation | Yahoo Finance is used |
 | `FRED_API_KEY` | [FRED](https://fred.stlouisfed.org/docs/api/api_key.html): release dates of economic indicators | Only FOMC dates are shown |
 | `ANTHROPIC_API_KEY` | [Claude](https://console.anthropic.com): reading tickers from images, the chat panel | Tesseract.js OCR; chat is off |
+| `EXA_API_KEY` | [Exa](https://exa.ai): web search in the chat | Search uses Tavily only (or is off) |
+| `TAVILY_API_KEY` | [Tavily](https://tavily.com): web search in the chat | Search uses Exa only (or is off) |
 
 Keys are read only by the server and never sent to the browser. `DEMO=1` shows made-up demo data without any network calls.
 
@@ -64,7 +76,7 @@ The web app is served as static assets and the API runs in the same Worker. **Th
 ```bash
 npx wrangler login
 npm run deploy                          # creates the KV namespace on first deploy
-npx wrangler secret put FMP_API_KEY     # repeat for FRED_API_KEY / ANTHROPIC_API_KEY
+npx wrangler secret put FMP_API_KEY     # repeat for FRED_API_KEY / ANTHROPIC_API_KEY / EXA_API_KEY / TAVILY_API_KEY
 ```
 
 Then, in the Cloudflare dashboard:
@@ -107,9 +119,13 @@ The FOMC schedule in `server/econ.ts` is maintained by hand — update it when t
 - **写真から銘柄を取り込む** — 証券アプリやウォッチリストのスクリーンショットから、ティッカーを読み取ります（Claude またはブラウザ内 OCR）。追加する前に確認・修正できます。
 - **ウォッチリストの比較** — 現在値・前日比・目標価格との乖離率・RSI・MACD の向き・決算までの日数を一覧で。列ごとに並べ替えできます。
 - **1 画面の詳細** — リアルタイム／遅延の表示付きの現在値とプレ・アフターマーケットの価格、アナリスト目標価格（平均・中央値・高値・安値）、ローソク足チャート（SMA 20/50/200・ボリンジャーバンド・RSI・MACD）、テクニカルのバッジ、次回決算日。
+- **銘柄の比較** — 選んだ銘柄を、予想・実績 PER、PSR、PBR、EV/EBITDA、PEG、時価総額、売上成長率、利益率、ROE、配当利回り、ベータのうち最大 4 つの棒グラフで比較。中央値の線と並べ替えできる表付き。
+- **業界別ヒートマップ** — 主要米国株（約 120 銘柄）またはウォッチリストを業界ごとにまとめ、面積は時価総額、色は 1 日・50 日線乖離・52 週の変化率。
+- **金利・商品・為替** — ヘッダー下の市場の要約バーと、米国・世界の株価指数、VIX、米国債利回りと利回り曲線、原油・金・銅、ドル・主要通貨、暗号資産（約 3 か月の推移付き）、FRED による米国経済指標の最新値（CPI、PCE、雇用、GDP など）。
 - **経済指標カレンダー** — CPI・雇用統計・PCE・GDP・PPI・小売売上高（FRED）と FOMC を、閲覧している場所の時刻で表示。ウォッチリストの決算日もまとめて並べます。
 - **ニュース** — 選んだ銘柄の最新ニュース。
-- **相場の相談** — 表示中のデータを Claude に渡して解説させます。売買の推奨や個別の投資助言はしないよう指示しています。
+- **経済ニュースのライブ TV** — 小窓（ドラッグで移動）と拡大を切り替えられるプレーヤー。Bloomberg Television、Yahoo Finance、NHK WORLD-JAPAN、Sky News、DW News（YouTube の公式ライブ）。
+- **AI に相談** — 表示中のデータを Claude が解説。最新情報が必要なときは **Exa と Tavily を同時に**使ってウェブ検索し、出典付きで答えます。**図**（Chart.js の棒・折れ線・面・ドーナツ・レーダー・散布図・バブル、three.js の回せる 3D 散布図）や表でも示します。売買の推奨や個別の投資助言はしないよう指示しています。
 - **自動更新** — 米国市場の取引時間中（プレ・アフター含む）は 20 秒ごと、それ以外は 5 分ごと。
 
 ### はじめ方
