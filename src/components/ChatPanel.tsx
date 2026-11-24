@@ -1,0 +1,182 @@
+import { useEffect, useRef, useState, type FormEvent } from 'react';
+import { api } from '../lib/api';
+import type { AppConfig } from '../types';
+
+interface Msg {
+  role: 'user' | 'assistant';
+  content: string;
+}
+
+/** 回答の簡易 Markdown（見出し・太字・箇条書き）を表示用に変換 */
+function Rich({ text }: { text: string }) {
+  const inline = (t: string) =>
+    t.split(/(\*\*[^*]+\*\*)/g).map((part, i) =>
+      part.startsWith('**') && part.endsWith('**') ? <strong key={i} className="font-semibold text-ink">{part.slice(2, -2)}</strong> : part,
+    );
+  return (
+    <>
+      {text.split('\n').map((line, i) => {
+        const h = line.match(/^#{1,6}\s+(.*)/);
+        if (h) return <p key={i} className="mt-2 font-semibold text-accent">{inline(h[1])}</p>;
+        const li = line.match(/^\s*(?:[-*・]|\d+\.)\s+(.*)/);
+        if (li) return <p key={i} className="relative pl-3.5 before:absolute before:left-0 before:text-mute before:content-['•']">{inline(li[1])}</p>;
+        if (/^\s*(---|\*\*\*)\s*$/.test(line)) return <hr key={i} className="my-2 border-line" />;
+        return line.trim() ? <p key={i}>{inline(line)}</p> : <div key={i} className="h-1.5" />;
+      })}
+    </>
+  );
+}
+
+const SUGGESTIONS = [
+  'この画面の要点をまとめて',
+  'テクニカル指標の状態を説明して',
+  '次の決算と経済指標で注目される点は？',
+  'ニュースの要点と株価との関係は？',
+  'ウォッチリストの中で目立つ動きは？',
+];
+
+interface Props {
+  open: boolean;
+  onClose: () => void;
+  config: AppConfig | null;
+  selected: string | null;
+  /** 送信の瞬間に、画面の最新データをまとめて返す */
+  getContext: () => Promise<unknown>;
+}
+
+export function ChatPanel({ open, onClose, config, selected, getContext }: Props) {
+  const [msgs, setMsgs] = useState<Msg[]>([]);
+  const [input, setInput] = useState('');
+  const [busy, setBusy] = useState(false);
+  const abortRef = useRef<AbortController | null>(null);
+  const endRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    endRef.current?.scrollIntoView({ block: 'end' });
+  }, [msgs]);
+  useEffect(() => () => abortRef.current?.abort(), []);
+
+  const send = async (text: string) => {
+    const q = text.trim();
+    if (!q || busy) return;
+    const history: Msg[] = [...msgs, { role: 'user', content: q }];
+    setMsgs([...history, { role: 'assistant', content: '' }]);
+    setInput('');
+    setBusy(true);
+    const ac = new AbortController();
+    abortRef.current = ac;
+    try {
+      const res = await api.chat(history, await getContext(), ac.signal);
+      const reader = res.body!.getReader();
+      const dec = new TextDecoder();
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        const chunk = dec.decode(value, { stream: true });
+        setMsgs((m) => [...m.slice(0, -1), { role: 'assistant', content: m[m.length - 1].content + chunk }]);
+      }
+    } catch (e) {
+      if (!ac.signal.aborted) {
+        setMsgs((m) => [...m.slice(0, -1), { role: 'assistant', content: `⚠ ${e instanceof Error ? e.message : String(e)}` }]);
+      }
+    } finally {
+      setBusy(false);
+      abortRef.current = null;
+    }
+  };
+
+  const submit = (e: FormEvent) => {
+    e.preventDefault();
+    send(input);
+  };
+
+  if (!open) return null;
+  return (
+    <aside className="fixed bottom-0 right-0 top-0 z-40 flex w-[min(440px,100vw)] flex-col border-l border-line bg-panel shadow-2xl">
+      <header className="flex items-center gap-2 border-b border-line px-3 py-2">
+        <h2 className="text-sm font-semibold">相場の相談</h2>
+        <span className="text-[11px] text-mute">{selected ? `${selected} を表示中` : ''} · Claude</span>
+        <div className="ml-auto flex gap-1">
+          {!!msgs.length && (
+            <button
+              onClick={() => {
+                abortRef.current?.abort();
+                setMsgs([]);
+              }}
+              className="rounded px-2 py-0.5 text-[11px] text-mute hover:bg-white/5 hover:text-ink"
+            >
+              新しい相談
+            </button>
+          )}
+          <button onClick={onClose} className="px-1 text-mute hover:text-ink" aria-label="閉じる">
+            ✕
+          </button>
+        </div>
+      </header>
+
+      <p className="border-b border-line bg-warnc/5 px-3 py-1.5 text-[10px] leading-relaxed text-warnc">
+        画面のデータをもとに情報を整理・解説します。売買の推奨や個別の投資助言は行いません。AI の回答は誤りを含むことがあります。
+      </p>
+
+      <div className="min-h-0 flex-1 space-y-3 overflow-auto px-3 py-3">
+        {!config?.anthropic && (
+          <p className="rounded bg-downc/10 p-2 text-xs text-downc">ANTHROPIC_API_KEY が未設定のため、相談機能は使えません。</p>
+        )}
+        {!msgs.length && config?.anthropic && (
+          <div className="space-y-2">
+            <p className="text-xs text-mute">表示中の銘柄・ウォッチリスト・ニュース・経済指標をもとに答えます。例えば:</p>
+            <div className="flex flex-wrap gap-1.5">
+              {SUGGESTIONS.map((s) => (
+                <button key={s} onClick={() => send(s)} className="rounded-full border border-line px-2.5 py-1 text-[11px] hover:border-accent hover:text-accent">
+                  {s}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+        {msgs.map((m, i) => (
+          <div key={i} className={m.role === 'user' ? 'flex justify-end' : ''}>
+            <div
+              className={`text-[13px] leading-relaxed ${m.role === 'user' ? 'whitespace-pre-wrap' : ''} ${
+                m.role === 'user' ? 'max-w-[85%] rounded-lg bg-accent/15 px-3 py-1.5' : 'text-ink'
+              }`}
+            >
+              {m.content ? (
+                m.role === 'assistant' ? <Rich text={m.content} /> : m.content
+              ) : busy && i === msgs.length - 1 ? (
+                <span className="animate-pulse text-mute">考えています…</span>
+              ) : null}
+            </div>
+          </div>
+        ))}
+        <div ref={endRef} />
+      </div>
+
+      <form onSubmit={submit} className="flex gap-2 border-t border-line p-2">
+        <textarea
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
+              e.preventDefault();
+              send(input);
+            }
+          }}
+          rows={2}
+          disabled={!config?.anthropic}
+          placeholder="質問を入力（Enter で送信、Shift+Enter で改行）"
+          className="min-h-0 flex-1 resize-none rounded border border-line bg-bg px-2 py-1.5 text-[13px] outline-none focus:border-accent disabled:opacity-50"
+        />
+        {busy ? (
+          <button type="button" onClick={() => abortRef.current?.abort()} className="rounded-md border border-line px-3 text-xs hover:bg-white/5">
+            停止
+          </button>
+        ) : (
+          <button type="submit" disabled={!input.trim() || !config?.anthropic} className="rounded-md bg-accent px-3 text-xs font-semibold text-bg disabled:opacity-40">
+            送信
+          </button>
+        )}
+      </form>
+    </aside>
+  );
+}
