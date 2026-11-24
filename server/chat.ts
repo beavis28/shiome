@@ -2,6 +2,9 @@
 // 情報提供に限定し、売買の推奨や個別の投資助言はしない。
 import Anthropic from '@anthropic-ai/sdk';
 import { searchProviders, webSearch } from './search.ts';
+import type { ChartSpec } from '../src/types.ts';
+import * as fmp from './fmp.ts';
+import * as yahoo from './yahoo.ts';
 
 export interface ChatMessage {
   role: 'user' | 'assistant';
@@ -47,6 +50,132 @@ const SEARCH_TOOL: Anthropic.Beta.BetaTool = {
   eager_input_streaming: true,
 };
 
+const CHART_TOOL: Anthropic.Beta.BetaTool = {
+  name: 'show_chart',
+  description:
+    'Display a chart to the user inside your answer (the chart appears where you call it). Use it when numbers are easier to grasp visually: comparing a metric across stocks or indicators (bar), or showing a trend over time (line). Only plot numbers that come from the dashboard data or from search results / tool outputs in this conversation; never invent values. Up to 4 series, up to 40 labels.',
+  input_schema: {
+    type: 'object',
+    properties: {
+      kind: { type: 'string', enum: ['bar', 'line'] },
+      title: { type: 'string', description: 'Chart title in Japanese' },
+      unit: { type: 'string', description: 'Unit of the values, e.g. "%", "倍", "ドル", "億ドル"' },
+      labels: { type: 'array', items: { type: 'string' }, description: 'Categories (bar) or x-axis points such as dates (line)' },
+      series: {
+        type: 'array',
+        items: {
+          type: 'object',
+          properties: { name: { type: 'string' }, values: { type: 'array', items: { type: ['number', 'null'] } } },
+          required: ['name', 'values'],
+          additionalProperties: false,
+        },
+        description: 'Each series has one value per label (null if unknown)',
+      },
+      source: { type: 'string', description: 'Where the numbers come from, e.g. "画面のデータ (Yahoo Finance)" or "CNBC 11/3"' },
+    },
+    required: ['kind', 'title', 'unit', 'labels', 'series'],
+    additionalProperties: false,
+  },
+  eager_input_streaming: true,
+};
+
+const PRICE_TOOL: Anthropic.Beta.BetaTool = {
+  name: 'show_price_comparison',
+  description:
+    'Fetch daily closing prices for 1-6 US tickers and display a line chart comparing them (rebased to 100 at the start by default). Returns each ticker\'s start/end price and % change so you can discuss the result.',
+  input_schema: {
+    type: 'object',
+    properties: {
+      symbols: { type: 'array', items: { type: 'string' }, description: 'Tickers such as AAPL, MSFT' },
+      range: { type: 'string', enum: ['1M', '3M', '6M', '1Y'] },
+      rebase: { type: 'boolean', description: 'true (default): start = 100 to compare performance; false: raw prices (only for a single ticker)' },
+    },
+    required: ['symbols', 'range'],
+    additionalProperties: false,
+  },
+  eager_input_streaming: true,
+};
+
+const VISUAL_RULES = `
+
+## 図や表で示す
+- 数字を比べるとき・推移を見せるときは、show_chart（棒グラフ・折れ線）や show_price_comparison（株価の比較）で図を出してください。1 回の回答で図は 2 つまでにします。
+- 図にする数字は、画面のデータ・検索結果・ツールの結果にあるものだけを使い、単位と出典を必ず付けてください。
+- 少ない項目の比較は Markdown の表（| 区切り）でも構いません。
+- 図を出したあとは、図から読み取れることを短く説明してください。`;
+
+const RANGE_DAYS = { '1M': 21, '3M': 63, '6M': 126, '1Y': 252 } as const;
+const SYMBOL_RE = /^[A-Z]{1,5}([.-][A-Z]{1,2})?$/;
+
+function parseChart(raw: unknown): ChartSpec | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const o = raw as Record<string, unknown>;
+  if ((o.kind !== 'bar' && o.kind !== 'line') || typeof o.title !== 'string' || !Array.isArray(o.labels) || !Array.isArray(o.series)) return null;
+  const labels = o.labels.map(String).slice(0, 40);
+  const series = (o.series as Record<string, unknown>[])
+    .slice(0, 4)
+    .map((x) => ({
+      name: String(x?.name ?? ''),
+      values: Array.isArray(x?.values) ? (x.values as unknown[]).slice(0, labels.length).map((v) => (typeof v === 'number' && Number.isFinite(v) ? v : null)) : [],
+    }))
+    .filter((x) => x.values.length);
+  if (!labels.length || !series.length) return null;
+  return { kind: o.kind, title: o.title.slice(0, 120), unit: String(o.unit ?? '').slice(0, 20), labels, series, source: typeof o.source === 'string' ? o.source.slice(0, 200) : undefined };
+}
+
+async function history(symbol: string) {
+  if (process.env.FMP_API_KEY) {
+    try {
+      return await fmp.getHistory(symbol);
+    } catch {
+      /* Yahoo へ */
+    }
+  }
+  return yahoo.yahooHistory(symbol);
+}
+
+async function priceComparison(raw: unknown): Promise<{ spec: ChartSpec; summary: unknown } | string> {
+  const o = (raw ?? {}) as Record<string, unknown>;
+  const symbols = [...new Set((Array.isArray(o.symbols) ? o.symbols : []).map((s) => String(s).toUpperCase().trim()))].filter((s) => SYMBOL_RE.test(s)).slice(0, 6);
+  const range = (['1M', '3M', '6M', '1Y'] as const).includes(o.range as never) ? (o.range as keyof typeof RANGE_DAYS) : '6M';
+  if (!symbols.length) return 'Invalid input: "symbols" must contain US tickers.';
+  const rebase = o.rebase !== false || symbols.length > 1;
+  const n = RANGE_DAYS[range];
+  const results = await Promise.allSettled(symbols.map((s) => history(s)));
+  const ok = symbols.flatMap((s, i) => (results[i].status === 'fulfilled' ? [{ s, bars: (results[i] as PromiseFulfilledResult<Awaited<ReturnType<typeof history>>>).value.slice(-(n + 1)) }] : []));
+  if (!ok.length) return 'Price history is not available for these tickers.';
+  // 最初の銘柄の日付を軸に、他の銘柄は直近の終値で埋める。点が多すぎるときは間引く
+  const dates = ok[0].bars.map((b) => b.time);
+  const step = Math.max(1, Math.ceil(dates.length / 60));
+  const idx = dates.map((_, k) => k).filter((k) => k % step === 0 || k === dates.length - 1);
+  const series = ok.map(({ s, bars }) => {
+    const map = new Map(bars.map((b) => [b.time, b.close]));
+    let last: number | null = null;
+    const closes = dates.map((d) => {
+      const v = map.get(d);
+      if (v !== undefined) last = v;
+      return last;
+    });
+    const base = closes.find((v) => v !== null) ?? null;
+    const values = idx.map((k) => {
+      const v = closes[k];
+      return v === null ? null : rebase && base ? +((v / base) * 100).toFixed(2) : v;
+    });
+    const end = closes[closes.length - 1];
+    return { name: s, values, start: base, end, changePct: base && end ? +(((end - base) / base) * 100).toFixed(2) : null };
+  });
+  const spec: ChartSpec = {
+    kind: 'line',
+    title: `株価の比較（${range}${rebase ? '・開始日=100' : ''}）`,
+    unit: rebase ? '（開始日=100）' : 'ドル',
+    labels: idx.map((k) => dates[k]),
+    series: series.map(({ name, values }) => ({ name, values })),
+    source: process.env.FMP_API_KEY ? 'FMP / Yahoo Finance の日足終値' : 'Yahoo Finance の日足終値',
+  };
+  const missing = symbols.filter((s) => !ok.find((x) => x.s === s));
+  return { spec, summary: { range, from: dates[0], to: dates[dates.length - 1], stocks: series.map(({ name, start, end, changePct }) => ({ symbol: name, start, end, changePct })), missing } };
+}
+
 const SEARCH_RULES = `
 
 ## ウェブ検索（search_web ツール）
@@ -62,6 +191,7 @@ export type ChatEvent =
   | { t: 'text'; v: string }
   | { t: 'search'; q: string }
   | { t: 'sources'; items: { title: string; url: string; date: string | null; providers: string[] }[] }
+  | { t: 'chart'; spec: ChartSpec }
   | { t: 'error'; v: string };
 
 function parseSearchInput(raw: unknown): { query: string; days?: number; topic?: 'general' | 'news' | 'finance' } | null {
@@ -85,7 +215,8 @@ export function chatStream(history: ChatMessage[], dashboard: unknown, opts: { w
       const messages: Msg[] = history.map((m) => ({ role: m.role, content: m.content }));
       const seen = new Set<string>();
       try {
-        for (let round = 0; round < 6; round++) {
+        let charts = 0;
+        for (let round = 0; round < 7; round++) {
           const stream = client.beta.messages.stream({
             model: 'claude-opus-5-5',
             max_tokens: 16000,
@@ -93,11 +224,11 @@ export function chatStream(history: ChatMessage[], dashboard: unknown, opts: { w
             fallbacks: 'default',
             output_config: { effort: 'medium' },
             system: [
-              { type: 'text', text: SYSTEM + (search ? SEARCH_RULES : '') },
+              { type: 'text', text: SYSTEM + VISUAL_RULES + (search ? SEARCH_RULES : '') },
               { type: 'text', text: `現在時刻: ${new Date().toISOString()}\n${context}` },
             ],
             // 検索の上限に達したら、ツールなしで答えをまとめさせる
-            ...(search && round < 4 ? { tools: [SEARCH_TOOL] } : {}),
+            ...(round < 5 ? { tools: [...(search && round < 4 ? [SEARCH_TOOL] : []), CHART_TOOL, PRICE_TOOL] } : {}),
             messages,
           });
           for await (const event of stream) {
@@ -118,6 +249,25 @@ export function chatStream(history: ChatMessage[], dashboard: unknown, opts: { w
           messages.push({ role: 'assistant', content: final.content as Anthropic.Beta.BetaContentBlockParam[] });
           const results = await Promise.all(
             calls.map(async (c): Promise<Anthropic.Beta.BetaToolResultBlockParam> => {
+              if (c.name === 'show_chart' || c.name === 'show_price_comparison') {
+                if (charts >= 3) return { type: 'tool_result', tool_use_id: c.id, is_error: true, content: 'Too many charts in one answer. Continue in text.' };
+                if (c.name === 'show_chart') {
+                  const spec = parseChart(c.input);
+                  if (!spec) return { type: 'tool_result', tool_use_id: c.id, is_error: true, content: 'Invalid chart input. Check kind, labels and series.values lengths.' };
+                  charts++;
+                  send({ t: 'chart', spec });
+                  return { type: 'tool_result', tool_use_id: c.id, content: 'Chart displayed to the user.' };
+                }
+                try {
+                  const r = await priceComparison(c.input);
+                  if (typeof r === 'string') return { type: 'tool_result', tool_use_id: c.id, is_error: true, content: r };
+                  charts++;
+                  send({ t: 'chart', spec: r.spec });
+                  return { type: 'tool_result', tool_use_id: c.id, content: `Chart displayed. Data: ${JSON.stringify(r.summary)}` };
+                } catch (e) {
+                  return { type: 'tool_result', tool_use_id: c.id, is_error: true, content: `Failed: ${e instanceof Error ? e.message : String(e)}` };
+                }
+              }
               const input = c.name === 'search_web' ? parseSearchInput(c.input) : null;
               if (!input) return { type: 'tool_result', tool_use_id: c.id, is_error: true, content: 'Invalid input: "query" (string) is required.' };
               send({ t: 'search', q: input.query });

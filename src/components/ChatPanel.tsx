@@ -1,6 +1,7 @@
-import { useEffect, useRef, useState, type FormEvent } from 'react';
+import { useEffect, useRef, useState, type FormEvent, type PointerEvent as RPointerEvent } from 'react';
 import { api } from '../lib/api';
-import type { AppConfig } from '../types';
+import type { AppConfig, ChartSpec } from '../types';
+import { ChatChart } from './ChatChart';
 
 interface Source {
   title: string;
@@ -13,7 +14,12 @@ interface Msg {
   content: string;
   searches?: string[];
   sources?: Source[];
+  charts?: ChartSpec[];
 }
+
+// 回答文の中で図を差し込む位置の印（表示時に図に置き換える）
+const MARK = (n: number) => `\u0000CHART:${n}\u0000`;
+const MARK_RE = /\u0000CHART:(\d+)\u0000/g;
 
 const WS_KEY = 'shiome.chat.webSearch';
 const readWs = () => {
@@ -30,9 +36,51 @@ function Rich({ text }: { text: string }) {
     t.split(/(\*\*[^*]+\*\*)/g).map((part, i) =>
       part.startsWith('**') && part.endsWith('**') ? <strong key={i} className="font-semibold text-ink">{part.slice(2, -2)}</strong> : part,
     );
+  // Markdown の表（| で始まる行が続く部分）をまとめて表にする
+  const lines = text.split('\n');
+  const blocks: ({ kind: 'line'; v: string } | { kind: 'table'; rows: string[][] })[] = [];
+  for (const line of lines) {
+    if (/^\s*\|.*\|\s*$/.test(line)) {
+      const cells = line.trim().slice(1, -1).split('|').map((c) => c.trim());
+      if (cells.every((c) => /^:?-{2,}:?$/.test(c))) continue; // 区切り行
+      const last = blocks[blocks.length - 1];
+      if (last?.kind === 'table') last.rows.push(cells);
+      else blocks.push({ kind: 'table', rows: [cells] });
+    } else blocks.push({ kind: 'line', v: line });
+  }
   return (
     <>
-      {text.split('\n').map((line, i) => {
+      {blocks.map((b, i) => {
+        if (b.kind === 'table') {
+          const [head, ...body] = b.rows;
+          return (
+            <div key={i} className="my-2 overflow-x-auto">
+              <table className="w-full text-[12px]">
+                <thead>
+                  <tr className="border-b border-line text-mute">
+                    {head.map((c, k) => (
+                      <th key={k} className="px-2 py-1 text-left font-medium">
+                        {inline(c)}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {body.map((r, ri) => (
+                    <tr key={ri} className="border-b border-line/50">
+                      {r.map((c, k) => (
+                        <td key={k} className={`px-2 py-1 ${/^[−+-]?[$¥]?[\d,.]+[%倍]?$/.test(c) ? 'num text-right' : ''}`}>
+                          {inline(c)}
+                        </td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          );
+        }
+        const line = b.v;
         const h = line.match(/^#{1,6}\s+(.*)/);
         if (h) return <p key={i} className="mt-2 font-semibold text-accent">{inline(h[1])}</p>;
         const li = line.match(/^\s*(?:[-*・]|\d+\.)\s+(.*)/);
@@ -46,6 +94,7 @@ function Rich({ text }: { text: string }) {
 
 const SUGGESTIONS = [
   '表示中の銘柄の最近のニュースと決算の内容は？',
+  'ウォッチリストの銘柄の6か月の値動きを図で比べて',
   'この画面の要点をまとめて',
   'テクニカル指標の状態を説明して',
   '次の決算と経済指標で注目される点は？',
@@ -67,6 +116,32 @@ export function ChatPanel({ open, onClose, config, selected, getContext }: Props
   const [input, setInput] = useState('');
   const [busy, setBusy] = useState(false);
   const [webSearch, setWebSearch] = useState(readWs);
+  // パネルの幅（左端をドラッグで変更。保存する）
+  const [width, setWidth] = useState(() => {
+    try {
+      return Number(localStorage.getItem('shiome.chat.width')) || 640;
+    } catch {
+      return 640;
+    }
+  });
+  const startDrag = (e: RPointerEvent) => {
+    e.preventDefault();
+    const move = (ev: PointerEvent) => setWidth(Math.round(Math.min(Math.max(window.innerWidth - ev.clientX, 380), window.innerWidth * 0.8)));
+    const up = () => {
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', up);
+      setWidth((w) => {
+        try {
+          localStorage.setItem('shiome.chat.width', String(w));
+        } catch {
+          /* 無視 */
+        }
+        return w;
+      });
+    };
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up);
+  };
   const engines = [config?.exa && 'Exa', config?.tavily && 'Tavily'].filter(Boolean) as string[];
   const canSearch = engines.length > 0;
   const abortRef = useRef<AbortController | null>(null);
@@ -88,7 +163,7 @@ export function ChatPanel({ open, onClose, config, selected, getContext }: Props
     abortRef.current = ac;
     try {
       const res = await api.chat(
-        history.map(({ role, content }) => ({ role, content })),
+        history.map(({ role, content, charts }) => ({ role, content: content.replace(MARK_RE, (_, n) => `[図: ${charts?.[Number(n)]?.title ?? ''}]`) })),
         await getContext(),
         canSearch && webSearch,
         ac.signal,
@@ -105,7 +180,7 @@ export function ChatPanel({ open, onClose, config, selected, getContext }: Props
         buf = lines.pop() ?? '';
         for (const line of lines) {
           if (!line.trim()) continue;
-          let ev: { t: string; v?: string; q?: string; items?: Source[] };
+          let ev: { t: string; v?: string; q?: string; items?: Source[]; spec?: ChartSpec };
           try {
             ev = JSON.parse(line);
           } catch {
@@ -114,6 +189,8 @@ export function ChatPanel({ open, onClose, config, selected, getContext }: Props
           if (ev.t === 'text') patch((m) => ({ ...m, content: m.content + (ev.v ?? '') }));
           else if (ev.t === 'search') patch((m) => ({ ...m, searches: [...(m.searches ?? []), ev.q ?? ''] }));
           else if (ev.t === 'sources') patch((m) => ({ ...m, sources: [...(m.sources ?? []), ...(ev.items ?? [])] }));
+          else if (ev.t === 'chart' && ev.spec)
+            patch((m) => ({ ...m, charts: [...(m.charts ?? []), ev.spec!], content: `${m.content}\n${MARK((m.charts ?? []).length)}\n` }));
           else if (ev.t === 'error') patch((m) => ({ ...m, content: `${m.content}\n\n⚠ ${ev.v}` }));
         }
       }
@@ -134,7 +211,12 @@ export function ChatPanel({ open, onClose, config, selected, getContext }: Props
 
   if (!open) return null;
   return (
-    <aside className="fixed bottom-0 right-0 top-0 z-40 flex w-[min(440px,100vw)] flex-col border-l border-line bg-panel shadow-2xl">
+    <aside className="fixed bottom-0 right-0 top-0 z-40 flex max-w-[100vw] flex-col border-l border-line bg-panel shadow-2xl" style={{ width }}>
+      <div
+        onPointerDown={startDrag}
+        title="ドラッグで幅を変更"
+        className="absolute -left-1 bottom-0 top-0 z-10 w-2 cursor-col-resize hover:bg-accent/30"
+      />
       <header className="flex items-center gap-2 border-b border-line px-3 py-2">
         <h2 className="text-sm font-semibold">相場の相談</h2>
         <span className="text-[11px] text-mute">{selected ? `${selected} を表示中` : ''} · Claude</span>
@@ -213,7 +295,13 @@ export function ChatPanel({ open, onClose, config, selected, getContext }: Props
                 </div>
               )}
               {m.content.trim() ? (
-                m.role === 'assistant' ? <Rich text={m.content} /> : m.content
+                m.role === 'assistant' ? (
+                  m.content.split(MARK_RE).map((part, k) =>
+                    k % 2 === 1 ? (m.charts?.[Number(part)] ? <ChatChart key={k} spec={m.charts[Number(part)]} /> : null) : <Rich key={k} text={part} />,
+                  )
+                ) : (
+                  m.content
+                )
               ) : busy && i === msgs.length - 1 ? (
                 <span className="animate-pulse text-mute">{m.searches?.length ? '検索結果を読んでいます…' : '考えています…'}</span>
               ) : null}

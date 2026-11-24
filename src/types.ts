@@ -193,3 +193,13 @@ export interface MacroPayload {
   warnings: string[];
   asOf: string;
 }
+
+/** 相談チャットで表示するグラフ */
+export interface ChartSpec {
+  kind: 'bar' | 'line';
+  title: string;
+  unit: string;
+  labels: string[];
+  series: { name: string; values: (number | null)[] }[];
+  source?: string;
+}
