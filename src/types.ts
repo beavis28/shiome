@@ -98,6 +98,7 @@ export interface AppConfig {
   fred: boolean;
   anthropic: boolean;
   exa?: boolean;
+  tavily?: boolean;
 }
 
 export interface OcrTicker {

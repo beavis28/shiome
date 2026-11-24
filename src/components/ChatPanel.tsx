@@ -6,6 +6,7 @@ interface Source {
   title: string;
   url: string;
   date: string | null;
+  providers?: string[];
 }
 interface Msg {
   role: 'user' | 'assistant';
@@ -66,7 +67,8 @@ export function ChatPanel({ open, onClose, config, selected, getContext }: Props
   const [input, setInput] = useState('');
   const [busy, setBusy] = useState(false);
   const [webSearch, setWebSearch] = useState(readWs);
-  const canSearch = !!config?.exa;
+  const engines = [config?.exa && 'Exa', config?.tavily && 'Tavily'].filter(Boolean) as string[];
+  const canSearch = engines.length > 0;
   const abortRef = useRef<AbortController | null>(null);
   const endRef = useRef<HTMLDivElement>(null);
 
@@ -138,7 +140,7 @@ export function ChatPanel({ open, onClose, config, selected, getContext }: Props
         <span className="text-[11px] text-mute">{selected ? `${selected} を表示中` : ''} · Claude</span>
         <label
           className={`ml-2 flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] ${canSearch && webSearch ? 'border-accent text-accent' : 'border-line text-mute'}`}
-          title={canSearch ? '必要なときに Exa でウェブを検索して答えます' : 'EXA_API_KEY が未設定のため使えません'}
+          title={canSearch ? `必要なときにウェブを検索して答えます（${engines.join(' + ')}）` : '検索の API キー（EXA_API_KEY / TAVILY_API_KEY）が未設定のため使えません'}
         >
           <input
             type="checkbox"
@@ -225,6 +227,12 @@ export function ChatPanel({ open, onClose, config, selected, getContext }: Props
                         <a href={src.url} target="_blank" rel="noreferrer noopener" className="min-w-0 flex-1 truncate text-accent hover:underline" title={src.title}>
                           {src.title || src.url}
                         </a>
+                        {src.providers && src.providers.length > 1 && (
+                          <span className="shrink-0 rounded bg-accent/15 px-1 text-[9px] text-accent" title="Exa と Tavily の両方で見つかった">
+                            両方
+                          </span>
+                        )}
+                        {src.providers?.length === 1 && <span className="shrink-0 text-[9px] text-mute">{src.providers[0]}</span>}
                         <span className="num shrink-0 text-mute">{src.date ? src.date.slice(0, 10) : new URL(src.url).hostname.replace(/^www\./, '')}</span>
                       </li>
                     ))}

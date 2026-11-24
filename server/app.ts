@@ -25,6 +25,7 @@ export const config = (): AppConfig => ({
   fred: !!process.env.FRED_API_KEY,
   anthropic: !!process.env.ANTHROPIC_API_KEY,
   exa: !!process.env.EXA_API_KEY,
+  tavily: !!process.env.TAVILY_API_KEY,
 });
 
 /** worker.ts が Access のログイン情報を入れる */
