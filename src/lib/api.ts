@@ -17,6 +17,7 @@ export const api = {
   heatmap: (universe: 'major' | 'watchlist', symbols: string[]) =>
     getJson<HeatmapPayload>(`/api/heatmap?universe=${universe}${symbols.length ? `&symbols=${encodeURIComponent(symbols.join(','))}` : ''}`),
   macro: () => getJson<MacroPayload>('/api/macro'),
+  tv: (channel: string) => getJson<{ videoId: string | null }>(`/api/tv/${encodeURIComponent(channel)}`),
   me: () => getJson<{ email: string | null }>('/api/me'),
   /** 相談チャット（回答はテキストのストリームで返る） */
   chat: async (messages: { role: 'user' | 'assistant'; content: string }[], dashboard: unknown, webSearch: boolean, signal?: AbortSignal) => {

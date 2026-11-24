@@ -6,6 +6,7 @@ import { chatStream, type ChatMessage } from './chat.ts';
 import { demoStock } from './demo.ts';
 import { fetchEcon } from './econ.ts';
 import { fetchMacro } from './macro.ts';
+import { liveVideoId } from './tv.ts';
 import { validateSymbol } from './fmp.ts';
 import { readTickersWithClaude } from './ocr.ts';
 import { fetchQuotes, fetchStock } from './stock.ts';
@@ -104,6 +105,14 @@ api.get('/heatmap', async (c) => {
     return c.json({ ...r, asOf: new Date().toISOString() });
   } catch (e) {
     return c.json({ error: `ヒートマップのデータを取得できませんでした（${msg(e)}）` }, 502);
+  }
+});
+
+api.get('/tv/:channel', async (c) => {
+  try {
+    return c.json({ videoId: await liveVideoId(c.req.param('channel')) });
+  } catch {
+    return c.json({ videoId: null });
   }
 });
 

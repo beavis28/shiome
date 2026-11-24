@@ -6,6 +6,7 @@ import { ChatPanel } from './components/ChatPanel';
 import { CompareView, DEFAULT_METRICS } from './components/CompareView';
 import { HeatmapView } from './components/HeatmapView';
 import { MacroView, MarketStrip } from './components/MacroView';
+import { TvPlayer } from './components/TvPlayer';
 import { NewsPanel } from './components/NewsPanel';
 import { buildDashboardContext } from './lib/context';
 import { WatchlistTable } from './components/WatchlistTable';
@@ -63,6 +64,8 @@ export default function App() {
   const [configError, setConfigError] = useState<string | null>(null);
   const [me, setMe] = useState<string | null>(null);
   const [chatOpen, setChatOpen] = useState(false);
+  const [tvOpen, setTvOpen] = useState(() => readLS('shiome.tv.open', false));
+  useEffect(() => writeLS('shiome.tv.open', tvOpen), [tvOpen]);
 
   // 銘柄比較（PER・PSR・時価総額など）
   const [view, setView] = useState<'detail' | 'compare' | 'heatmap' | 'macro'>('detail');
@@ -303,6 +306,13 @@ export default function App() {
           ))}
         </span>
         <button
+          onClick={() => setTvOpen((o) => !o)}
+          title="経済ニュースのライブ配信（Bloomberg など）"
+          className={`rounded-md border px-3 py-1 text-xs ${tvOpen ? 'border-accent bg-accent/15 text-accent' : 'border-line hover:bg-white/5'}`}
+        >
+          📺 TV
+        </button>
+        <button
           onClick={() => setChatOpen((o) => !o)}
           className={`rounded-md border px-3 py-1 text-xs ${chatOpen ? 'border-accent bg-accent/15 text-accent' : 'border-line hover:bg-white/5'}`}
         >
@@ -395,6 +405,8 @@ export default function App() {
         ⚠ 本アプリは情報提供のみを目的としたもので、投資助言や売買の推奨ではありません。データは遅延・誤りを含む場合があります。投資判断はご自身の責任で行ってください。
         データ: Yahoo Finance（非公式・個人利用）/ Financial Modeling Prep / FRED / FRB（FOMC 日程）
       </footer>
+
+      {tvOpen && <TvPlayer onClose={() => setTvOpen(false)} />}
 
       <ChatPanel
         open={chatOpen}
