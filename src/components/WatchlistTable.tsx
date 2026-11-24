@@ -13,9 +13,11 @@ interface Props {
   onSelect: (s: string) => void;
   onRemove: (s: string) => void;
   onAdd: (s: string) => void;
+  /** 比較モードのとき、比較に含める銘柄のチェック */
+  compare?: { checked: string[]; toggle: (s: string) => void };
 }
 
-export function WatchlistTable({ symbols, states, derived, selected, onSelect, onRemove, onAdd }: Props) {
+export function WatchlistTable({ symbols, states, derived, selected, onSelect, onRemove, onAdd, compare }: Props) {
   const [sort, setSort] = useState<{ key: SortKey; dir: 1 | -1 } | null>(null);
   const [input, setInput] = useState('');
 
@@ -110,6 +112,16 @@ export function WatchlistTable({ symbols, states, derived, selected, onSelect, o
                 >
                   <td className={`px-2 py-1.5 ${active ? 'border-l-2 border-accent' : 'border-l-2 border-transparent'}`}>
                     <div className="flex items-center gap-1">
+                      {compare && (
+                        <input
+                          type="checkbox"
+                          aria-label={`${s} を比較に含める`}
+                          checked={compare.checked.includes(s)}
+                          onClick={(e) => e.stopPropagation()}
+                          onChange={() => compare.toggle(s)}
+                          className="mr-1 accent-sky-400"
+                        />
+                      )}
                       <span className="font-semibold">{s}</span>
                       <button
                         title="ウォッチリストから外す"

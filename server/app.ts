@@ -1,14 +1,14 @@
 // API のルート定義（Hono）。Node（server/node.ts）と Cloudflare Workers（server/worker.ts）で共通。
 // キーは process.env から読み、ブラウザには渡さない。
 import { Hono } from 'hono';
-import type { AppConfig } from '../src/types.ts';
+import type { AppConfig, Valuation } from '../src/types.ts';
 import { chatStream, type ChatMessage } from './chat.ts';
 import { demoStock } from './demo.ts';
 import { fetchEcon } from './econ.ts';
 import { validateSymbol } from './fmp.ts';
 import { readTickersWithClaude } from './ocr.ts';
 import { fetchQuotes, fetchStock } from './stock.ts';
-import { yahooNews } from './yahoo.ts';
+import { yahooNews, yahooValuation } from './yahoo.ts';
 
 const SYMBOL_RE = /^[A-Z]{1,5}([.-][A-Z]{1,2})?$/;
 const parseSymbols = (v: unknown) =>
@@ -73,6 +73,22 @@ api.get('/news/:symbol', async (c) => {
   } catch (e) {
     return c.json({ error: `ニュースを取得できませんでした（${msg(e)}）` }, 502);
   }
+});
+
+api.get('/valuation', async (c) => {
+  const symbols = parseSymbols(c.req.query('symbols')).slice(0, 20);
+  const data: Record<string, Valuation> = {};
+  const errors: Record<string, string> = {};
+  await Promise.all(
+    symbols.map(async (s) => {
+      try {
+        data[s] = await yahooValuation(s);
+      } catch (e) {
+        errors[s] = msg(e);
+      }
+    }),
+  );
+  return c.json({ data, errors });
 });
 
 api.get('/econ', async (c) => c.json(await fetchEcon()));

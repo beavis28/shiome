@@ -1,7 +1,7 @@
 // Yahoo Finance（非公式 API: yahoo-finance2）からの取得。キー不要・個人利用向け。
 // 仕様変更で突然取れなくなることがあるため、呼び出し側で FMP にフォールバックする。
 import YahooFinance from 'yahoo-finance2';
-import type { Bar, Earnings, NewsItem, PriceTarget, Quote } from '../src/types.ts';
+import type { Bar, Earnings, NewsItem, PriceTarget, Quote, Valuation } from '../src/types.ts';
 import { cached, HOUR, MIN } from './cache.ts';
 
 import { AsyncLocalStorage } from 'node:async_hooks';
@@ -103,11 +103,18 @@ export function yahooHistory(symbol: string) {
 }
 
 function summary(symbol: string) {
-  return cached(`yf:summary:${symbol}`, 12 * HOUR, async () => {
-    const s = await client().quoteSummary(ySym(symbol), { modules: ['financialData', 'calendarEvents'] }, { validateResult: false });
+  return cached(`yf:summary2:${symbol}`, 12 * HOUR, async () => {
+    const s = await client().quoteSummary(
+      ySym(symbol),
+      { modules: ['financialData', 'calendarEvents', 'summaryDetail', 'defaultKeyStatistics', 'price'] },
+      { validateResult: false },
+    );
     return JSON.parse(JSON.stringify(s)) as {
       financialData?: Record<string, unknown>;
       calendarEvents?: { earnings?: Record<string, unknown> };
+      summaryDetail?: Record<string, unknown>;
+      defaultKeyStatistics?: Record<string, unknown>;
+      price?: Record<string, unknown>;
     };
   });
 }
@@ -135,6 +142,33 @@ export async function yahooEarnings(symbol: string): Promise<Earnings> {
     revenueEstimated: num(e?.revenueAverage),
     lastDate: null,
     estimate: e?.isEarningsDateEstimate === true,
+  };
+}
+
+/** 比較用の指標（PER・PSR・時価総額など）。quoteSummary を目標価格・決算日と共有（12 時間キャッシュ） */
+export async function yahooValuation(symbol: string): Promise<Valuation> {
+  const s = await summary(symbol);
+  const sd = s.summaryDetail ?? {};
+  const ks = s.defaultKeyStatistics ?? {};
+  const fd = s.financialData ?? {};
+  const pr = s.price ?? {};
+  return {
+    symbol,
+    name: (pr.shortName as string | undefined) ?? (pr.longName as string | undefined) ?? null,
+    marketCap: num(sd.marketCap) ?? num(pr.marketCap),
+    trailingPE: num(sd.trailingPE),
+    forwardPE: num(sd.forwardPE) ?? num(ks.forwardPE),
+    psr: num(sd.priceToSalesTrailing12Months),
+    pbr: num(ks.priceToBook),
+    evToEbitda: num(ks.enterpriseToEbitda),
+    peg: num(ks.pegRatio),
+    dividendYield: num(sd.dividendYield),
+    revenueGrowth: num(fd.revenueGrowth),
+    profitMargin: num(fd.profitMargins) ?? num(ks.profitMargins),
+    operatingMargin: num(fd.operatingMargins),
+    roe: num(fd.returnOnEquity),
+    beta: num(sd.beta) ?? num(ks.beta),
+    source: 'Yahoo',
   };
 }
 

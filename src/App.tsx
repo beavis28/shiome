@@ -3,13 +3,14 @@ import { DetailPanel } from './components/DetailPanel';
 import { EconCalendar } from './components/EconCalendar';
 import { ImportDialog } from './components/ImportDialog';
 import { ChatPanel } from './components/ChatPanel';
+import { CompareView, DEFAULT_METRICS } from './components/CompareView';
 import { NewsPanel } from './components/NewsPanel';
 import { buildDashboardContext } from './lib/context';
 import { WatchlistTable } from './components/WatchlistTable';
 import { api } from './lib/api';
 import { derive, type Derived, type StockState } from './lib/derive';
 import { loadWatchlist, saveWatchlist } from './lib/watchlist';
-import type { AppConfig, EconPayload } from './types';
+import type { AppConfig, EconPayload, Valuation } from './types';
 
 const MARKET_LABEL: Record<string, string> = {
   REGULAR: '米国市場 取引中',
@@ -19,6 +20,22 @@ const MARKET_LABEL: Record<string, string> = {
   PREPRE: '閉場',
   CLOSED: '閉場',
 };
+
+function readLS<T>(key: string, fallback: T): T {
+  try {
+    const raw = localStorage.getItem(key);
+    return raw ? (JSON.parse(raw) as T) : fallback;
+  } catch {
+    return fallback;
+  }
+}
+function writeLS(key: string, value: unknown) {
+  try {
+    localStorage.setItem(key, JSON.stringify(value));
+  } catch {
+    /* 無視 */
+  }
+}
 
 const SYMBOL_RE = /^[A-Z]{1,5}([.-][A-Z]{1,2})?$/;
 
@@ -44,6 +61,15 @@ export default function App() {
   const [configError, setConfigError] = useState<string | null>(null);
   const [me, setMe] = useState<string | null>(null);
   const [chatOpen, setChatOpen] = useState(false);
+
+  // 銘柄比較（PER・PSR・時価総額など）
+  const [compareMode, setCompareMode] = useState(false);
+  const [compareSel, setCompareSel] = useState<string[]>(() => readLS('shiome.compare.symbols', [] as string[]));
+  const [compareMetrics, setCompareMetrics] = useState<(keyof Valuation)[]>(() => readLS('shiome.compare.metrics', DEFAULT_METRICS));
+  const [valuation, setValuation] = useState<{ data: Record<string, Valuation>; errors: Record<string, string> }>({ data: {}, errors: {} });
+  const [valuationLoading, setValuationLoading] = useState(false);
+  useEffect(() => writeLS('shiome.compare.symbols', compareSel), [compareSel]);
+  useEffect(() => writeLS('shiome.compare.metrics', compareMetrics), [compareMetrics]);
   const inflight = useRef(new Set<string>());
   const [liveAt, setLiveAt] = useState<string | null>(null);
   const [newsKey, setNewsKey] = useState(0);
@@ -144,6 +170,27 @@ export default function App() {
     return () => clearInterval(id);
   }, []);
 
+  const compareSymbols = useMemo(() => {
+    const sel = compareSel.filter((s) => symbols.includes(s));
+    return sel.length ? sel : symbols.slice(0, 12);
+  }, [compareSel, symbols]);
+
+  useEffect(() => {
+    if (!compareMode) return;
+    const missing = compareSymbols.filter((s) => !valuation.data[s] && !valuation.errors[s]);
+    if (!missing.length) return;
+    let alive = true;
+    setValuationLoading(true);
+    api
+      .valuation(missing)
+      .then((r) => alive && setValuation((v) => ({ data: { ...v.data, ...r.data }, errors: { ...v.errors, ...r.errors } })))
+      .catch((e) => alive && setValuation((v) => ({ ...v, errors: { ...v.errors, ...Object.fromEntries(missing.map((s) => [s, String(e)])) } })))
+      .finally(() => alive && setValuationLoading(false));
+    return () => {
+      alive = false;
+    };
+  }, [compareMode, compareSymbols, valuation]);
+
   const derived = useMemo(() => {
     const out: Record<string, Derived> = {};
     for (const s of symbols) out[s] = derive(states[s]?.data);
@@ -209,6 +256,12 @@ export default function App() {
           </span>
         )}
         <button
+          onClick={() => setCompareMode((m) => !m)}
+          className={`rounded-md border px-3 py-1 text-xs ${compareMode ? 'border-accent bg-accent/15 text-accent' : 'border-line hover:bg-white/5'}`}
+        >
+          📊 {compareMode ? '詳細に戻る' : '銘柄を比較'}
+        </button>
+        <button
           onClick={() => setChatOpen((o) => !o)}
           className={`rounded-md border px-3 py-1 text-xs ${chatOpen ? 'border-accent bg-accent/15 text-accent' : 'border-line hover:bg-white/5'}`}
         >
@@ -246,9 +299,32 @@ export default function App() {
           onSelect={setSelected}
           onRemove={remove}
           onAdd={(s) => add([s])}
+          compare={
+            compareMode
+              ? {
+                  checked: compareSymbols,
+                  toggle: (s) =>
+                    setCompareSel((cur) => {
+                      const base = cur.filter((x) => symbols.includes(x)).length ? cur : compareSymbols;
+                      return base.includes(s) ? base.filter((x) => x !== s) : [...base, s];
+                    }),
+                }
+              : undefined
+          }
         />
         <div className="min-h-0 min-w-0">
-          {selected ? (
+          {compareMode ? (
+            <CompareView
+              symbols={compareSymbols}
+              data={valuation.data}
+              errors={Object.fromEntries(Object.entries(valuation.errors).filter(([k]) => compareSymbols.includes(k)))}
+              loading={valuationLoading}
+              focus={selected}
+              onFocus={setSelected}
+              metrics={compareMetrics}
+              onMetrics={setCompareMetrics}
+            />
+          ) : selected ? (
             <DetailPanel symbol={selected} state={states[selected]} d={derived[selected]} />
           ) : (
             <div className="flex h-full items-center justify-center rounded-lg border border-line bg-panel text-sm text-mute">銘柄を選択してください</div>
@@ -272,7 +348,10 @@ export default function App() {
         selected={selected}
         getContext={async () => {
           const news = selected ? await api.news(selected).then((r) => r.news, () => []) : [];
-          return buildDashboardContext({ selected, symbols, states, derived, econ, news, marketState });
+          const ctx = buildDashboardContext({ selected, symbols, states, derived, econ, news, marketState });
+          return compareMode
+            ? { ...ctx, comparison: { note: 'ratios are fractions (0.12 = 12%); source Yahoo Finance', stocks: compareSymbols.map((s) => valuation.data[s]).filter(Boolean) } }
+            : ctx;
         }}
       />
 

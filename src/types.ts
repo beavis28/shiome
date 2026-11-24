@@ -104,3 +104,28 @@ export interface OcrTicker {
   name?: string | null;
   confidence?: 'high' | 'medium' | 'low';
 }
+
+/** 銘柄比較用の指標（比率は 0.12 = 12% の形） */
+export interface Valuation {
+  symbol: string;
+  name: string | null;
+  marketCap: number | null;
+  trailingPE: number | null;
+  forwardPE: number | null;
+  psr: number | null;
+  pbr: number | null;
+  evToEbitda: number | null;
+  peg: number | null;
+  dividendYield: number | null;
+  revenueGrowth: number | null;
+  profitMargin: number | null;
+  operatingMargin: number | null;
+  roe: number | null;
+  beta: number | null;
+  source: DataSource;
+}
+
+export interface ValuationPayload {
+  data: Record<string, Valuation>;
+  errors: Record<string, string>;
+}
