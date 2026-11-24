@@ -216,3 +216,11 @@ export interface ChartSpec {
   zTitle?: string;
   source?: string;
 }
+
+/** 端末をまたいで同期する設定（ログインしているメールアドレスごと） */
+export interface Prefs {
+  watchlist: string[];
+  compareSymbols: string[];
+  compareMetrics: string[];
+  updatedAt: number; // ミリ秒
+}

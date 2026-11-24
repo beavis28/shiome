@@ -7,6 +7,7 @@ import { demoStock } from './demo.ts';
 import { fetchEcon } from './econ.ts';
 import { fetchMacro } from './macro.ts';
 import { liveVideoId } from './tv.ts';
+import { loadPrefs, prefsAvailable, sanitize, savePrefs } from './prefs.ts';
 import { validateSymbol } from './fmp.ts';
 import { readTickersWithClaude } from './ocr.ts';
 import { fetchQuotes, fetchStock } from './stock.ts';
@@ -35,6 +36,29 @@ export type ApiEnv = { Variables: { userEmail: string | null } };
 export const api = new Hono<ApiEnv>();
 
 api.get('/me', (c) => c.json({ email: c.get('userEmail') ?? null }));
+
+// 端末をまたいだ設定の同期（ログインしているときだけ）
+api.get('/prefs', async (c) => {
+  const email = c.get('userEmail');
+  if (!email || !prefsAvailable()) return c.json({ sync: false, prefs: null });
+  return c.json({ sync: true, prefs: await loadPrefs(email) });
+});
+
+api.put('/prefs', async (c) => {
+  const email = c.get('userEmail');
+  if (!email || !prefsAvailable()) return c.json({ error: '同期は使えません（ログインしていません）' }, 400);
+  const raw = await c.req.text();
+  if (raw.length > 20_000) return c.json({ error: '設定が大きすぎます' }, 413);
+  let body: unknown;
+  try {
+    body = JSON.parse(raw);
+  } catch {
+    return c.json({ error: 'JSON が不正です' }, 400);
+  }
+  const prefs = sanitize(body);
+  if (!prefs) return c.json({ error: '設定の形式が正しくありません' }, 400);
+  return c.json({ sync: true, prefs: await savePrefs(email, prefs) });
+});
 
 api.post('/chat', async (c) => {
   if (!config().anthropic) return c.json({ error: 'ANTHROPIC_API_KEY が未設定です' }, 400);

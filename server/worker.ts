@@ -3,6 +3,7 @@ import { Hono } from 'hono';
 import { checkAccess, type AccessEnv } from './access.ts';
 import { api, type ApiEnv } from './app.ts';
 import { setCacheStore } from './cache.ts';
+import { setPrefsStore } from './prefs.ts';
 import { withYahooSession } from './yahoo.ts';
 
 interface Env extends AccessEnv {
@@ -24,6 +25,7 @@ app.use('/api/*', async (c, next) => {
         }
       : null,
   );
+  setPrefsStore(kv ? { get: (key) => kv.get(key), put: (key, value) => kv.put(key, value) } : null);
   const auth = await checkAccess(c.req.raw, c.env);
   if (!auth.ok) return c.json({ error: auth.error }, auth.status);
   c.set('userEmail', auth.email);

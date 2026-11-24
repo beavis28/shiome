@@ -1,6 +1,7 @@
 // ウォッチリストはこのブラウザの localStorage に保存する
 const KEY = 'usdash.watchlist.v1';
-const DEFAULT = ['AAPL', 'NVDA', 'MSFT', 'TSLA'];
+export const DEFAULT_WATCHLIST = ['AAPL', 'NVDA', 'MSFT', 'TSLA'];
+const DEFAULT = DEFAULT_WATCHLIST;
 
 export function loadWatchlist(): string[] {
   try {

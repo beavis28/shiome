@@ -12,8 +12,8 @@ import { buildDashboardContext } from './lib/context';
 import { WatchlistTable } from './components/WatchlistTable';
 import { api } from './lib/api';
 import { derive, type Derived, type StockState } from './lib/derive';
-import { loadWatchlist, saveWatchlist } from './lib/watchlist';
-import type { AppConfig, EconPayload, MacroPayload, Valuation } from './types';
+import { DEFAULT_WATCHLIST, loadWatchlist, saveWatchlist } from './lib/watchlist';
+import type { AppConfig, EconPayload, MacroPayload, Prefs, Valuation } from './types';
 
 type MobileTab = 'list' | 'detail' | 'compare' | 'heatmap' | 'macro' | 'news';
 const MOBILE_TABS: [MobileTab, string, string][] = [
@@ -51,6 +51,19 @@ function writeLS(key: string, value: unknown) {
 }
 
 const SYMBOL_RE = /^[A-Z]{1,5}([.-][A-Z]{1,2})?$/;
+
+function SyncChip({ state }: { state: 'off' | 'loading' | 'synced' | 'saving' | 'error' }) {
+  if (state === 'off') return null;
+  const label = { loading: '同期を確認中', synced: '同期済み', saving: '保存中…', error: '同期できません' }[state];
+  return (
+    <span
+      title="ウォッチリストと比較の設定を、ログインしているメールアドレスごとに保存し、ほかの端末と同期します"
+      className={`rounded px-1.5 py-0.5 text-[10px] ring-1 ring-inset ${state === 'error' ? 'text-downc ring-downc/30' : state === 'synced' ? 'text-sky-300 ring-sky-300/30' : 'text-mute ring-white/10'}`}
+    >
+      ☁ {label}
+    </span>
+  );
+}
 
 function StatusChip({ on, label, offText }: { on: boolean | undefined; label: string; offText: string }) {
   return (
@@ -240,6 +253,92 @@ export default function App() {
     };
   }, [compareMode, compareSymbols, valuation]);
 
+  // ── 端末をまたいだ同期（ログインしているときだけ。新しいほうを採用） ──
+  const [sync, setSync] = useState<'off' | 'loading' | 'synced' | 'saving' | 'error'>('loading');
+  const syncReady = useRef(false);
+  // 最後にサーバーと一致させた内容（同じなら保存しない）
+  const lastSynced = useRef('');
+  const contentKey = (p: Pick<Prefs, 'watchlist' | 'compareSymbols' | 'compareMetrics'>) => JSON.stringify([p.watchlist, p.compareSymbols, p.compareMetrics]);
+  const localUpdatedAt = useRef<number>(readLS('shiome.prefs.updatedAt', 0));
+  const setLocalUpdated = (t: number) => {
+    localUpdatedAt.current = t;
+    writeLS('shiome.prefs.updatedAt', t);
+  };
+  const applyRemote = useCallback((p: Prefs) => {
+    lastSynced.current = contentKey(p);
+    setSymbols(p.watchlist);
+    setCompareSel(p.compareSymbols);
+    if (p.compareMetrics.length) setCompareMetrics(p.compareMetrics as (keyof Valuation)[]);
+    setSelected((cur) => (cur && p.watchlist.includes(cur) ? cur : (p.watchlist[0] ?? null)));
+    setLocalUpdated(p.updatedAt);
+  }, []);
+  const prefsNow = useRef<Prefs | null>(null);
+  prefsNow.current = { watchlist: symbols, compareSymbols: compareSel, compareMetrics: compareMetrics as string[], updatedAt: localUpdatedAt.current };
+
+  const pull = useCallback(async () => {
+    try {
+      const r = await api.prefs();
+      if (!r.sync) {
+        setSync('off');
+        return;
+      }
+      if (r.prefs && !localUpdatedAt.current) {
+        // この端末で初めての同期：サーバーの内容に、この端末だけにある銘柄を足す（どちらも消さない）
+        const local = prefsNow.current!.watchlist;
+        const isDefault = local.length === DEFAULT_WATCHLIST.length && local.every((x, i) => x === DEFAULT_WATCHLIST[i]);
+        const extra = isDefault ? [] : local.filter((x) => !r.prefs!.watchlist.includes(x));
+        if (extra.length) {
+          const merged: Prefs = { ...r.prefs, watchlist: [...r.prefs.watchlist, ...extra].slice(0, 100), updatedAt: Date.now() };
+          applyRemote(merged);
+          await api.savePrefs(merged);
+        } else applyRemote(r.prefs);
+      } else if (r.prefs && r.prefs.updatedAt > localUpdatedAt.current) applyRemote(r.prefs);
+      else if (!r.prefs || r.prefs.updatedAt < localUpdatedAt.current || !localUpdatedAt.current) {
+        // サーバーにまだない／手元のほうが新しい → 送る
+        const t = localUpdatedAt.current || Date.now();
+        setLocalUpdated(t);
+        await api.savePrefs({ ...prefsNow.current!, updatedAt: t });
+        lastSynced.current = contentKey(prefsNow.current!);
+      } else lastSynced.current = contentKey(r.prefs);
+      setSync('synced');
+    } catch {
+      setSync('error');
+    } finally {
+      syncReady.current = true;
+    }
+  }, [applyRemote]);
+
+  useEffect(() => {
+    pull();
+    const onVis = () => !document.hidden && syncReady.current && pull();
+    document.addEventListener('visibilitychange', onVis);
+    window.addEventListener('focus', onVis);
+    return () => {
+      document.removeEventListener('visibilitychange', onVis);
+      window.removeEventListener('focus', onVis);
+    };
+  }, [pull]);
+
+  // 変更したら少し待ってから保存（KV の書き込み回数を節約）
+  useEffect(() => {
+    if (!syncReady.current || sync === 'off' || contentKey(prefsNow.current!) === lastSynced.current) return;
+    const t = Date.now();
+    setLocalUpdated(t);
+    setSync('saving');
+    const id = setTimeout(() => {
+      api.savePrefs({ ...prefsNow.current!, updatedAt: t }).then(
+        (r) => {
+          if (r.prefs.updatedAt > t) applyRemote(r.prefs);
+          else lastSynced.current = contentKey(r.prefs);
+          setSync('synced');
+        },
+        () => setSync('error'),
+      );
+    }, 1500);
+    return () => clearTimeout(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [symbols, compareSel, compareMetrics]);
+
   const derived = useMemo(() => {
     const out: Record<string, Derived> = {};
     for (const s of symbols) out[s] = derive(states[s]?.data);
@@ -349,6 +448,7 @@ export default function App() {
           <StatusChip on={config?.fmp} label="FMP" offText="未設定（Yahoo で代替）" />
           <StatusChip on={config?.fred} label="FRED" offText="未設定" />
           <StatusChip on={config?.anthropic} label="Claude" offText="未設定（OCR使用）" />
+          <SyncChip state={sync} />
           {me && (
             <span className="ml-2 flex items-center gap-2 border-l border-line pl-3 text-[11px] text-mute">
               <span className="max-w-[180px] truncate" title={me}>
@@ -391,6 +491,7 @@ export default function App() {
                   <StatusChip on={config?.fmp} label="FMP" offText="未設定（Yahoo で代替）" />
                   <StatusChip on={config?.fred} label="FRED" offText="未設定" />
                   <StatusChip on={config?.anthropic} label="Claude" offText="未設定（OCR使用）" />
+          <SyncChip state={sync} />
                   {me && (
                     <span className="ml-auto flex items-center gap-2 text-[11px] text-mute">
                       <span className="max-w-[160px] truncate">{me}</span>

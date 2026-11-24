@@ -1,4 +1,4 @@
-import type { AppConfig, EconPayload, NewsItem, OcrTicker, Quote, StockPayload, ValuationPayload, HeatmapPayload, MacroPayload } from '../types';
+import type { AppConfig, EconPayload, NewsItem, OcrTicker, Quote, StockPayload, ValuationPayload, HeatmapPayload, MacroPayload, Prefs } from '../types';
 
 async function getJson<T>(url: string, init?: RequestInit): Promise<T> {
   const res = await fetch(url, init);
@@ -18,6 +18,13 @@ export const api = {
     getJson<HeatmapPayload>(`/api/heatmap?universe=${universe}${symbols.length ? `&symbols=${encodeURIComponent(symbols.join(','))}` : ''}`),
   macro: () => getJson<MacroPayload>('/api/macro'),
   tv: (channel: string) => getJson<{ videoId: string | null }>(`/api/tv/${encodeURIComponent(channel)}`),
+  prefs: () => getJson<{ sync: boolean; prefs: Prefs | null }>('/api/prefs'),
+  savePrefs: (prefs: Prefs) =>
+    getJson<{ sync: boolean; prefs: Prefs }>('/api/prefs', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(prefs),
+    }),
   me: () => getJson<{ email: string | null }>('/api/me'),
   /** 相談チャット（回答はテキストのストリームで返る） */
   chat: async (messages: { role: 'user' | 'assistant'; content: string }[], dashboard: unknown, webSearch: boolean, signal?: AbortSignal) => {

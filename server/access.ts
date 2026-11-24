@@ -16,12 +16,13 @@ export interface AccessEnv {
   ACCESS_TEAM_DOMAIN?: string; // 例: https://yourteam.cloudflareaccess.com
   ACCESS_AUD?: string; // Access アプリケーションの Application Audience (AUD) タグ
   ALLOW_PUBLIC?: string; // "1" で認証なし（非推奨。動作確認用）
+  DEV_USER_EMAIL?: string; // ALLOW_PUBLIC=1 のときだけ使う、手元テスト用のログイン中メールアドレス
 }
 
 export type AccessResult = { ok: true; email: string | null } | { ok: false; status: 401 | 503; error: string };
 
 export async function checkAccess(req: Request, env: AccessEnv): Promise<AccessResult> {
-  if (env.ALLOW_PUBLIC === '1') return { ok: true, email: null };
+  if (env.ALLOW_PUBLIC === '1') return { ok: true, email: env.DEV_USER_EMAIL || null };
   const team = env.ACCESS_TEAM_DOMAIN?.replace(/\/+$/, '');
   if (!team || !env.ACCESS_AUD) {
     return { ok: false, status: 503, error: 'Cloudflare Access が未設定です（ACCESS_TEAM_DOMAIN と ACCESS_AUD を設定してください）' };
