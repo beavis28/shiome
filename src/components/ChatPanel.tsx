@@ -54,12 +54,12 @@ function Rich({ text }: { text: string }) {
         if (b.kind === 'table') {
           const [head, ...body] = b.rows;
           return (
-            <div key={i} className="my-2 overflow-x-auto">
+            <div key={i} className="my-3 overflow-x-auto">
               <table className="w-full text-[12px]">
                 <thead>
                   <tr className="border-b border-line text-mute">
                     {head.map((c, k) => (
-                      <th key={k} className="px-2 py-1 text-left font-medium">
+                      <th key={k} className="px-2.5 py-1.5 text-left font-medium">
                         {inline(c)}
                       </th>
                     ))}
@@ -69,7 +69,7 @@ function Rich({ text }: { text: string }) {
                   {body.map((r, ri) => (
                     <tr key={ri} className="border-b border-line/50">
                       {r.map((c, k) => (
-                        <td key={k} className={`px-2 py-1 ${/^[−+-]?[$¥]?[\d,.]+[%倍]?$/.test(c) ? 'num text-right' : ''}`}>
+                        <td key={k} className={`px-2.5 py-1.5 ${/^[−+-]?[$¥]?[\d,.]+[%倍]?$/.test(c) ? 'num text-right' : ''}`}>
                           {inline(c)}
                         </td>
                       ))}
@@ -82,11 +82,11 @@ function Rich({ text }: { text: string }) {
         }
         const line = b.v;
         const h = line.match(/^#{1,6}\s+(.*)/);
-        if (h) return <p key={i} className="mt-2 font-semibold text-accent">{inline(h[1])}</p>;
+        if (h) return <p key={i} className="mb-1.5 mt-5 text-[14px] font-semibold text-accent first:mt-0">{inline(h[1])}</p>;
         const li = line.match(/^\s*(?:[-*・]|\d+\.)\s+(.*)/);
-        if (li) return <p key={i} className="relative pl-3.5 before:absolute before:left-0 before:text-mute before:content-['•']">{inline(li[1])}</p>;
+        if (li) return <p key={i} className="relative my-1.5 pl-4 before:absolute before:left-0.5 before:text-mute before:content-['•']">{inline(li[1])}</p>;
         if (/^\s*(---|\*\*\*)\s*$/.test(line)) return <hr key={i} className="my-2 border-line" />;
-        return line.trim() ? <p key={i}>{inline(line)}</p> : <div key={i} className="h-1.5" />;
+        return line.trim() ? <p key={i} className="my-2">{inline(line)}</p> : <div key={i} className="h-2" />;
       })}
     </>
   );
@@ -262,7 +262,7 @@ export function ChatPanel({ open, onClose, config, selected, getContext }: Props
         画面のデータ{canSearch && webSearch ? 'とウェブ検索の結果' : ''}をもとに情報を整理・解説します。売買の推奨や個別の投資助言は行いません。AI の回答は誤りを含むことがあります。
       </p>
 
-      <div className="min-h-0 flex-1 space-y-3 overflow-auto px-3 py-3">
+      <div className="min-h-0 flex-1 space-y-5 overflow-auto px-4 py-4">
         {!config?.anthropic && (
           <p className="rounded bg-downc/10 p-2 text-xs text-downc">ANTHROPIC_API_KEY が未設定のため、相談機能は使えません。</p>
         )}
@@ -281,8 +281,8 @@ export function ChatPanel({ open, onClose, config, selected, getContext }: Props
         {msgs.map((m, i) => (
           <div key={i} className={m.role === 'user' ? 'flex justify-end' : ''}>
             <div
-              className={`text-[13px] leading-relaxed ${m.role === 'user' ? 'whitespace-pre-wrap' : ''} ${
-                m.role === 'user' ? 'max-w-[85%] rounded-lg bg-accent/15 px-3 py-1.5' : 'text-ink'
+              className={`text-[13.5px] leading-[1.85] tracking-[0.01em] ${m.role === 'user' ? 'whitespace-pre-wrap' : ''} ${
+                m.role === 'user' ? 'max-w-[85%] rounded-lg bg-accent/15 px-3.5 py-2' : 'text-ink'
               }`}
             >
               {!!m.searches?.length && (
