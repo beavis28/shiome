@@ -129,3 +129,21 @@ export interface ValuationPayload {
   data: Record<string, Valuation>;
   errors: Record<string, string>;
 }
+
+/** ヒートマップの 1 銘柄（変化率は % 単位: 1.5 = +1.5%） */
+export interface HeatItem {
+  symbol: string;
+  name: string;
+  sector: string; // 日本語のセクター名
+  marketCap: number;
+  price: number;
+  change1d: number | null;
+  vs50d: number | null;
+  change52w: number | null;
+}
+
+export interface HeatmapPayload {
+  items: HeatItem[];
+  missing: string[];
+  asOf: string;
+}

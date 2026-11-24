@@ -1,7 +1,8 @@
 // Yahoo Finance（非公式 API: yahoo-finance2）からの取得。キー不要・個人利用向け。
 // 仕様変更で突然取れなくなることがあるため、呼び出し側で FMP にフォールバックする。
 import YahooFinance from 'yahoo-finance2';
-import type { Bar, Earnings, NewsItem, PriceTarget, Quote, Valuation } from '../src/types.ts';
+import type { Bar, Earnings, HeatItem, NewsItem, PriceTarget, Quote, Valuation } from '../src/types.ts';
+import { MAJOR_SECTOR, SECTOR_JA } from './universe.ts';
 import { cached, HOUR, MIN } from './cache.ts';
 
 import { AsyncLocalStorage } from 'node:async_hooks';
@@ -103,10 +104,10 @@ export function yahooHistory(symbol: string) {
 }
 
 function summary(symbol: string) {
-  return cached(`yf:summary2:${symbol}`, 12 * HOUR, async () => {
+  return cached(`yf:summary3:${symbol}`, 12 * HOUR, async () => {
     const s = await client().quoteSummary(
       ySym(symbol),
-      { modules: ['financialData', 'calendarEvents', 'summaryDetail', 'defaultKeyStatistics', 'price'] },
+      { modules: ['financialData', 'calendarEvents', 'summaryDetail', 'defaultKeyStatistics', 'price', 'assetProfile'] },
       { validateResult: false },
     );
     return JSON.parse(JSON.stringify(s)) as {
@@ -115,6 +116,7 @@ function summary(symbol: string) {
       summaryDetail?: Record<string, unknown>;
       defaultKeyStatistics?: Record<string, unknown>;
       price?: Record<string, unknown>;
+      assetProfile?: Record<string, unknown>;
     };
   });
 }
@@ -170,6 +172,48 @@ export async function yahooValuation(symbol: string): Promise<Valuation> {
     beta: num(sd.beta) ?? num(ks.beta),
     source: 'Yahoo',
   };
+}
+
+/** ヒートマップ用: 多数の銘柄の時価総額と変化率をまとめて取得（60 秒キャッシュ） */
+export async function yahooHeatmap(symbols: string[]): Promise<{ items: HeatItem[]; missing: string[] }> {
+  const key = [...symbols].sort().join(',');
+  return cached(`yf:heat:${key}`, 60_000, async () => {
+    const rows: RawQuote[] = [];
+    for (let i = 0; i < symbols.length; i += 60) {
+      const part = symbols.slice(i, i + 60);
+      rows.push(...((await client().quote(part.map(ySym), {}, { validateResult: false })) as unknown as RawQuote[]));
+    }
+    const bySym = new Map(rows.filter(Boolean).map((r) => [String(r.symbol).toUpperCase(), r]));
+    const items: HeatItem[] = [];
+    const missing: string[] = [];
+    for (const s of symbols) {
+      const r = bySym.get(ySym(s));
+      const cap = num(r?.marketCap);
+      if (!r || !cap) {
+        missing.push(s);
+        continue;
+      }
+      let sector = MAJOR_SECTOR[s];
+      if (!sector) {
+        try {
+          sector = String((await summary(s)).assetProfile?.sector ?? '');
+        } catch {
+          sector = '';
+        }
+      }
+      items.push({
+        symbol: s,
+        name: String(r.shortName ?? r.longName ?? s),
+        sector: SECTOR_JA[sector] ?? (sector || 'その他'),
+        marketCap: cap,
+        price: num(r.regularMarketPrice) ?? 0,
+        change1d: num(r.regularMarketChangePercent),
+        vs50d: num(r.fiftyDayAverageChangePercent) !== null ? num(r.fiftyDayAverageChangePercent)! * 100 : null,
+        change52w: num(r.fiftyTwoWeekChangePercent),
+      });
+    }
+    return { items, missing };
+  });
 }
 
 /** 銘柄に関するニュース（10 分キャッシュ） */

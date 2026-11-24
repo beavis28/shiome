@@ -8,7 +8,8 @@ import { fetchEcon } from './econ.ts';
 import { validateSymbol } from './fmp.ts';
 import { readTickersWithClaude } from './ocr.ts';
 import { fetchQuotes, fetchStock } from './stock.ts';
-import { yahooNews, yahooValuation } from './yahoo.ts';
+import { MAJOR_SYMBOLS } from './universe.ts';
+import { yahooHeatmap, yahooNews, yahooValuation } from './yahoo.ts';
 
 const SYMBOL_RE = /^[A-Z]{1,5}([.-][A-Z]{1,2})?$/;
 const parseSymbols = (v: unknown) =>
@@ -89,6 +90,18 @@ api.get('/valuation', async (c) => {
     }),
   );
   return c.json({ data, errors });
+});
+
+api.get('/heatmap', async (c) => {
+  const universe = c.req.query('universe') === 'watchlist' ? 'watchlist' : 'major';
+  const symbols = universe === 'watchlist' ? parseSymbols(c.req.query('symbols')).slice(0, 60) : MAJOR_SYMBOLS;
+  if (!symbols.length) return c.json({ items: [], missing: [], asOf: new Date().toISOString() });
+  try {
+    const r = await yahooHeatmap(symbols);
+    return c.json({ ...r, asOf: new Date().toISOString() });
+  } catch (e) {
+    return c.json({ error: `ヒートマップのデータを取得できませんでした（${msg(e)}）` }, 502);
+  }
 });
 
 api.get('/econ', async (c) => c.json(await fetchEcon()));

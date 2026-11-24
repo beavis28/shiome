@@ -4,6 +4,7 @@ import { EconCalendar } from './components/EconCalendar';
 import { ImportDialog } from './components/ImportDialog';
 import { ChatPanel } from './components/ChatPanel';
 import { CompareView, DEFAULT_METRICS } from './components/CompareView';
+import { HeatmapView } from './components/HeatmapView';
 import { NewsPanel } from './components/NewsPanel';
 import { buildDashboardContext } from './lib/context';
 import { WatchlistTable } from './components/WatchlistTable';
@@ -63,7 +64,8 @@ export default function App() {
   const [chatOpen, setChatOpen] = useState(false);
 
   // 銘柄比較（PER・PSR・時価総額など）
-  const [compareMode, setCompareMode] = useState(false);
+  const [view, setView] = useState<'detail' | 'compare' | 'heatmap'>('detail');
+  const compareMode = view === 'compare';
   const [compareSel, setCompareSel] = useState<string[]>(() => readLS('shiome.compare.symbols', [] as string[]));
   const [compareMetrics, setCompareMetrics] = useState<(keyof Valuation)[]>(() => readLS('shiome.compare.metrics', DEFAULT_METRICS));
   const [valuation, setValuation] = useState<{ data: Record<string, Valuation>; errors: Record<string, string> }>({ data: {}, errors: {} });
@@ -255,12 +257,25 @@ export default function App() {
             )}
           </span>
         )}
-        <button
-          onClick={() => setCompareMode((m) => !m)}
-          className={`rounded-md border px-3 py-1 text-xs ${compareMode ? 'border-accent bg-accent/15 text-accent' : 'border-line hover:bg-white/5'}`}
-        >
-          📊 {compareMode ? '詳細に戻る' : '銘柄を比較'}
-        </button>
+        <span className="flex overflow-hidden rounded-md border border-line text-xs" role="tablist" aria-label="表示の切り替え">
+          {(
+            [
+              ['detail', '📈 詳細'],
+              ['compare', '📊 比較'],
+              ['heatmap', '🟩 ヒートマップ'],
+            ] as const
+          ).map(([k, label]) => (
+            <button
+              key={k}
+              role="tab"
+              aria-selected={view === k}
+              onClick={() => setView(k)}
+              className={`border-l border-line px-2.5 py-1 first:border-l-0 ${view === k ? 'bg-accent/15 text-accent' : 'hover:bg-white/5'}`}
+            >
+              {label}
+            </button>
+          ))}
+        </span>
         <button
           onClick={() => setChatOpen((o) => !o)}
           className={`rounded-md border px-3 py-1 text-xs ${chatOpen ? 'border-accent bg-accent/15 text-accent' : 'border-line hover:bg-white/5'}`}
@@ -313,7 +328,17 @@ export default function App() {
           }
         />
         <div className="min-h-0 min-w-0">
-          {compareMode ? (
+          {view === 'heatmap' ? (
+            <HeatmapView
+              watchlist={symbols}
+              refreshMs={pollMs}
+              onPick={(sym) => {
+                if (!symbols.includes(sym)) add([sym]);
+                setSelected(sym);
+                setView('detail');
+              }}
+            />
+          ) : compareMode ? (
             <CompareView
               symbols={compareSymbols}
               data={valuation.data}
