@@ -357,7 +357,7 @@ export default function App() {
         />
         <div className="min-h-0 min-w-0">
           {view === 'macro' ? (
-            <MacroView macro={macro} error={macroError} />
+            <MacroView macro={macro} error={macroError} econ={econ} />
           ) : view === 'heatmap' ? (
             <HeatmapView
               watchlist={symbols}
@@ -409,6 +409,7 @@ export default function App() {
                 ...base,
                 markets: {
                   note: 'rates in %, change for rates is in percentage points; others changePct in %',
+                  usEconomicIndicators: macro.indicators.map((i) => ({ name: i.label, latest: i.value, previous: i.prev, period: i.date, unit: i.unit })),
                   groups: macro.groups.map((g) => ({
                     group: g.label,
                     items: g.items.map((i) => ({ name: i.label, value: i.value, change: i.change, changePct: i.changePct, threeMonthsAgo: i.spark[0]?.[1] ?? null })),

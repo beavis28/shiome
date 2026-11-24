@@ -161,6 +161,22 @@ export interface MacroItem {
   asOf: string | null;
   source: 'Yahoo' | 'FRED';
   note?: string;
+  state?: string | null; // 市場の状態（REGULAR など）
+}
+
+/** 米国の経済指標（最新の発表値） */
+export interface Indicator {
+  id: string;
+  label: string;
+  value: number | null;
+  prev: number | null;
+  unit: '%' | 'k' | 'num';
+  decimals: number;
+  date: string | null; // 対象期間の開始日（月次なら 2026-09-01）
+  freq: 'M' | 'Q' | 'W' | 'D';
+  spark: [string, number][];
+  nextKey?: string; // 経済指標カレンダーの key（CPI など）
+  note?: string;
 }
 
 export interface MacroGroup {
@@ -171,6 +187,7 @@ export interface MacroGroup {
 
 export interface MacroPayload {
   groups: MacroGroup[];
+  indicators: Indicator[];
   warnings: string[];
   asOf: string;
 }

@@ -2,7 +2,7 @@
 //  - 現在値と前日比: Yahoo Finance（まとめて 1 回で取得、60 秒キャッシュ）
 //  - 約 3 か月の推移: Yahoo の日足（1 時間キャッシュ）
 //  - 2 年債・FF 金利・10年-2年差: FRED（6 時間キャッシュ。FRED_API_KEY がある場合のみ）
-import type { MacroGroup, MacroItem, MacroPayload } from '../src/types.ts';
+import type { Indicator, MacroGroup, MacroItem, MacroPayload } from '../src/types.ts';
 import { cached, HOUR } from './cache.ts';
 import { yahooRaw } from './yahoo.ts';
 
@@ -18,6 +18,21 @@ const YAHOO_GROUPS: { key: string; label: string; items: Def[] }[] = [
       { id: '^DJI', label: 'ダウ平均', unit: 'index', decimals: 2 },
       { id: '^RUT', label: 'ラッセル2000', unit: 'index', decimals: 2, note: '米小型株' },
       { id: '^VIX', label: 'VIX', unit: 'pt', decimals: 2, note: '恐怖指数。20 を超えると不安が強いとされる' },
+    ],
+  },
+  {
+    key: 'world',
+    label: '世界の株価指数',
+    items: [
+      { id: '^N225', label: '日経平均', unit: 'index', decimals: 2 },
+      { id: '^HSI', label: '香港ハンセン', unit: 'index', decimals: 2 },
+      { id: '000001.SS', label: '上海総合', unit: 'index', decimals: 2 },
+      { id: '^KS11', label: '韓国 KOSPI', unit: 'index', decimals: 2 },
+      { id: '^TWII', label: '台湾加権', unit: 'index', decimals: 2, note: '半導体（TSMC）の比重が大きい' },
+      { id: '^BSESN', label: 'インド SENSEX', unit: 'index', decimals: 2 },
+      { id: '^GDAXI', label: 'ドイツ DAX', unit: 'index', decimals: 2 },
+      { id: '^STOXX50E', label: 'ユーロ・ストックス50', unit: 'index', decimals: 2 },
+      { id: '^FTSE', label: '英国 FTSE100', unit: 'index', decimals: 2 },
     ],
   },
   {
@@ -108,6 +123,57 @@ async function fredSeries(def: Def, key: string): Promise<MacroItem> {
   };
 }
 
+// 米国の主な経済指標（FRED）。units は FRED の変換: pc1=前年比 %, chg=前回からの増減, pch=前月比 %
+const INDICATORS: { id: string; label: string; units: string; unit: Indicator['unit']; decimals: number; freq: Indicator['freq']; nextKey?: string; note?: string }[] = [
+  { id: 'CPIAUCSL', label: 'CPI（前年比）', units: 'pc1', unit: '%', decimals: 1, freq: 'M', nextKey: 'CPI', note: '消費者物価指数。インフレの代表的な指標' },
+  { id: 'CPILFESL', label: 'コア CPI（前年比）', units: 'pc1', unit: '%', decimals: 1, freq: 'M', nextKey: 'CPI', note: '食品とエネルギーを除いた CPI' },
+  { id: 'PCEPILFE', label: 'コア PCE（前年比）', units: 'pc1', unit: '%', decimals: 1, freq: 'M', nextKey: 'PCE', note: 'FRB が物価目標（2%）に使う指標' },
+  { id: 'T10YIE', label: '期待インフレ率（10年）', units: 'lin', unit: '%', decimals: 2, freq: 'D', note: '市場が予想する今後 10 年の平均インフレ率（ブレークイーブン）' },
+  { id: 'UNRATE', label: '失業率', units: 'lin', unit: '%', decimals: 1, freq: 'M', nextKey: 'NFP' },
+  { id: 'PAYEMS', label: '非農業部門雇用者数（増減）', units: 'chg', unit: 'k', decimals: 0, freq: 'M', nextKey: 'NFP', note: '前月からの雇用の増減（千人）' },
+  { id: 'ICSA', label: '新規失業保険申請件数', units: 'lin', unit: 'k', decimals: 0, freq: 'W', note: '毎週木曜発表。増えると雇用の悪化を示す' },
+  { id: 'A191RL1Q225SBEA', label: '実質 GDP 成長率（年率）', units: 'lin', unit: '%', decimals: 1, freq: 'Q', nextKey: 'GDP', note: '前期比・年率換算' },
+  { id: 'RSAFS', label: '小売売上高（前月比）', units: 'pch', unit: '%', decimals: 1, freq: 'M', nextKey: 'RETAIL' },
+  { id: 'UMCSENT', label: 'ミシガン大消費者信頼感', units: 'lin', unit: 'num', decimals: 1, freq: 'M', note: '消費者の景気の見方。高いほど楽観的' },
+];
+
+async function fetchIndicators(key: string, warnings: string[]): Promise<Indicator[]> {
+  const start = new Date(Date.now() - 3 * 365 * 86400_000).toISOString().slice(0, 10);
+  const res = await Promise.allSettled(
+    INDICATORS.map((d) =>
+      cached(`macro:ind:${d.id}:${d.units}`, 6 * HOUR, async () => {
+        const qs = new URLSearchParams({ series_id: d.id, api_key: key, file_type: 'json', units: d.units, observation_start: start, sort_order: 'asc' });
+        const r = await fetch(`https://api.stlouisfed.org/fred/series/observations?${qs}`);
+        if (!r.ok) throw new Error(`FRED エラー (${r.status})`);
+        const j = (await r.json()) as { observations?: { date: string; value: string }[] };
+        let obs = (j.observations ?? []).filter((o) => o.value !== '.').map((o) => [o.date, Number(o.value)] as [string, number]);
+        if (d.id === 'ICSA') obs = obs.map(([t, v]) => [t, v / 1000] as [string, number]); // 千件
+        if (d.freq === 'D') obs = obs.filter((_, k, a) => k % 5 === 0 || k === a.length - 1); // 日次は間引く
+        return obs;
+      }).then((obs) => {
+        const last = obs[obs.length - 1];
+        const prev = obs[obs.length - 2];
+        return {
+          id: d.id,
+          label: d.label,
+          value: last?.[1] ?? null,
+          prev: prev?.[1] ?? null,
+          unit: d.unit,
+          decimals: d.decimals,
+          date: last?.[0] ?? null,
+          freq: d.freq,
+          spark: obs.slice(-36),
+          nextKey: d.nextKey,
+          note: d.note,
+        } satisfies Indicator;
+      }),
+    ),
+  );
+  const out = res.flatMap((r) => (r.status === 'fulfilled' ? [r.value] : []));
+  if (out.length < INDICATORS.length) warnings.push('FRED の経済指標を一部取得できませんでした');
+  return out;
+}
+
 export async function fetchMacro(): Promise<MacroPayload> {
   const warnings: string[] = [];
   const defs = YAHOO_GROUPS.flatMap((g) => g.items);
@@ -125,12 +191,13 @@ export async function fetchMacro(): Promise<MacroPayload> {
           change: num(r.regularMarketChange),
           changePct: num(r.regularMarketChangePercent),
           time: iso(r.regularMarketTime),
+          state: r.marketState ? String(r.marketState) : null,
         },
       ]),
     );
   }).catch((e) => {
     warnings.push(`Yahoo: ${e instanceof Error ? e.message : e}`);
-    return {} as Record<string, { price: number | null; change: number | null; changePct: number | null; time: string | null }>;
+    return {} as Record<string, { price: number | null; change: number | null; changePct: number | null; time: string | null; state: string | null }>;
   });
 
   const sparks = await Promise.all(defs.map((d) => spark(d.id).catch(() => [] as [string, number][])));
@@ -153,6 +220,7 @@ export async function fetchMacro(): Promise<MacroPayload> {
         asOf: q?.time ?? null,
         source: 'Yahoo' as const,
         note: d.note,
+        state: q?.state ?? null,
       };
     }),
   }));
@@ -170,5 +238,6 @@ export async function fetchMacro(): Promise<MacroPayload> {
     warnings.push('FRED_API_KEY が未設定のため、2 年債・FF 金利・10年-2年差は表示されません');
   }
 
-  return { groups, warnings, asOf: new Date().toISOString() };
+  const indicators = key ? await fetchIndicators(key, warnings) : [];
+  return { groups, indicators, warnings, asOf: new Date().toISOString() };
 }

@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from 'react';
-import type { MacroItem, MacroPayload } from '../types';
+import type { EconPayload, Indicator, MacroItem, MacroPayload } from '../types';
 import { Card, changeColor } from './ui';
 
 export function fmtMacroValue(i: MacroItem) {
@@ -25,11 +25,14 @@ const changeOf = (i: MacroItem) => (i.unit === 'yield' ? i.change : i.changePct)
 
 /** 約 3 か月の推移。マウスを乗せると日付と値を表示 */
 function Sparkline({ item }: { item: MacroItem }) {
+  return <Spark pts={item.spark} decimals={item.decimals} suffix={item.unit === 'yield' ? '%' : ''} label={`${item.label} の約 3 か月の推移`} />;
+}
+
+export function Spark({ pts, decimals, suffix, label, width = 84 }: { pts: [string, number][]; decimals: number; suffix: string; label: string; width?: number }) {
   const [hi, setHi] = useState<number | null>(null);
-  const pts = item.spark;
-  const W = 84;
+  const W = width;
   const H = 24;
-  if (pts.length < 2) return <span className="inline-block w-[84px] text-center text-[10px] text-mute">—</span>;
+  if (pts.length < 2) return <span className="inline-block text-center text-[10px] text-mute" style={{ width: W }}>—</span>;
   const vs = pts.map((p) => p[1]);
   const lo = Math.min(...vs);
   const hiV = Math.max(...vs);
@@ -49,7 +52,7 @@ function Sparkline({ item }: { item: MacroItem }) {
         }}
         onMouseLeave={() => setHi(null)}
         role="img"
-        aria-label={`${item.label} の約 3 か月の推移`}
+        aria-label={label}
       >
         <path d={d} fill="none" stroke="#60a5fa" strokeWidth="1.5" strokeLinejoin="round" />
         {hi !== null && <line x1={x(cur)} x2={x(cur)} y1={0} y2={H} stroke="rgba(255,255,255,.25)" />}
@@ -57,8 +60,9 @@ function Sparkline({ item }: { item: MacroItem }) {
       </svg>
       {hi !== null && (
         <span className="num pointer-events-none absolute -top-5 right-0 z-10 whitespace-nowrap rounded bg-bg/95 px-1.5 text-[10px] ring-1 ring-line">
-          {pts[cur][0].slice(5).replace('-', '/')} {pts[cur][1].toLocaleString('en-US', { maximumFractionDigits: item.decimals })}
-          {item.unit === 'yield' ? '%' : ''}
+          {pts[cur][0].slice(2).replaceAll('-', '/')}{' '}
+          {pts[cur][1].toLocaleString('en-US', { maximumFractionDigits: decimals })}
+          {suffix}
         </span>
       )}
     </span>
@@ -137,6 +141,7 @@ function Group({ label, items, children }: { label: string; items: MacroItem[]; 
         {items.map((i) => (
           <div key={i.id} className="flex items-center gap-2 px-3 py-0.5">
             <span className="min-w-0 flex-1 truncate text-xs" title={i.note ? `${i.label}: ${i.note}` : i.label}>
+              {i.state === 'REGULAR' && <span className="mr-1 inline-block h-1.5 w-1.5 rounded-full bg-upc align-middle" title="取引中" />}
               {i.label}
               {i.note && <span className="ml-0.5 text-[9px] text-mute">ⓘ</span>}
             </span>
@@ -153,7 +158,69 @@ function Group({ label, items, children }: { label: string; items: MacroItem[]; 
   );
 }
 
-export function MacroView({ macro, error }: { macro: MacroPayload | null; error: string | null }) {
+const pad = (n: number) => String(n).padStart(2, '0');
+function periodLabel(i: Indicator) {
+  if (!i.date) return '—';
+  const [y, m, d] = i.date.split('-').map(Number);
+  if (i.freq === 'Q') return `${y}年${m}-${m + 2}月期`;
+  if (i.freq === 'M') return `${y}年${m}月`;
+  if (i.freq === 'W') return `${m}/${pad(d)} 週`;
+  return `${m}/${pad(d)}`;
+}
+function fmtInd(i: Indicator, v: number | null, signed = false) {
+  if (v === null || !Number.isFinite(v)) return '—';
+  const sign = signed || i.id === 'PAYEMS' ? (v > 0 ? '+' : v < 0 ? '−' : '±') : v < 0 ? '−' : '';
+  const n = Math.abs(v).toLocaleString('en-US', { minimumFractionDigits: i.decimals, maximumFractionDigits: i.decimals });
+  if (i.unit === '%') return `${sign}${n}${signed ? 'pt' : '%'}`;
+  if (i.unit === 'k') return `${sign}${n}${i.id === 'ICSA' ? '千件' : '千人'}`;
+  return `${sign}${n}`;
+}
+
+function Indicators({ items, econ }: { items: Indicator[]; econ: EconPayload | null }) {
+  const today = new Date().toISOString().slice(0, 10);
+  const next = (key?: string) => (key ? econ?.events.find((e) => e.key === key && e.date >= today)?.date : undefined);
+  return (
+    <Card title="米国の経済指標（最新の発表）" right={<span className="text-[10px] text-mute">FRED · 推移は約3年</span>}>
+      <table className="w-full text-xs">
+        <thead className="text-[10px] text-mute">
+          <tr className="border-b border-line">
+            <th className="px-3 py-1 text-left font-medium">指標</th>
+            <th className="px-2 py-1 text-right font-medium">最新</th>
+            <th className="px-2 py-1 text-right font-medium">前回から</th>
+            <th className="px-2 py-1 text-left font-medium">対象期間</th>
+            <th className="px-2 py-1 text-left font-medium">次回発表</th>
+            <th className="px-3 py-1 text-right font-medium">推移</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-line/50">
+          {items.map((i) => {
+            const diff = i.value !== null && i.prev !== null ? i.value - i.prev : null;
+            const n = next(i.nextKey);
+            return (
+              <tr key={i.id}>
+                <td className="px-3 py-0.5" title={i.note}>
+                  {i.label}
+                  {i.note && <span className="ml-0.5 text-[9px] text-mute">ⓘ</span>}
+                </td>
+                <td className="num px-2 py-0.5 text-right font-semibold">{fmtInd(i, i.value)}</td>
+                <td className="num px-2 py-0.5 text-right text-mute">
+                  {diff === null ? '—' : `${diff > 0 ? '▲' : diff < 0 ? '▼' : ''} ${fmtInd(i, diff, true)}`}
+                </td>
+                <td className="num px-2 py-0.5 text-mute">{periodLabel(i)}</td>
+                <td className="num px-2 py-0.5 text-mute">{n ? `${Number(n.slice(5, 7))}/${Number(n.slice(8))}` : i.freq === 'W' ? '毎週木曜' : i.freq === 'D' ? '毎日' : '—'}</td>
+                <td className="px-3 py-0.5 text-right">
+                  <Spark pts={i.spark} decimals={i.decimals} suffix={i.unit === '%' ? '%' : ''} label={`${i.label} の推移`} width={110} />
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </Card>
+  );
+}
+
+export function MacroView({ macro, error, econ }: { macro: MacroPayload | null; error: string | null; econ: EconPayload | null }) {
   if (!macro) {
     return <Card className="flex h-full items-center justify-center text-sm text-mute">{error ?? '読み込み中…'}</Card>;
   }
@@ -169,7 +236,8 @@ export function MacroView({ macro, error }: { macro: MacroPayload | null; error:
       <div className="grid grid-cols-2 gap-2">
         <div className="flex flex-col gap-2">
           {g('index') && <Group label={g('index')!.label} items={g('index')!.items} />}
-          {g('commodities') && <Group label={g('commodities')!.label} items={g('commodities')!.items} />}
+          {g('world') && <Group label={g('world')!.label} items={g('world')!.items} />}
+          {g('fx') && <Group label={g('fx')!.label} items={g('fx')!.items} />}
         </div>
         <div className="flex flex-col gap-2">
           {rates && (
@@ -177,12 +245,17 @@ export function MacroView({ macro, error }: { macro: MacroPayload | null; error:
               <YieldCurve items={rates.items} />
             </Group>
           )}
-          {g('fx') && <Group label={g('fx')!.label} items={g('fx')!.items} />}
+          {g('commodities') && <Group label={g('commodities')!.label} items={g('commodities')!.items} />}
           {g('crypto') && <Group label={g('crypto')!.label} items={g('crypto')!.items} />}
         </div>
       </div>
+      {macro.indicators.length > 0 && (
+        <div className="mt-2">
+          <Indicators items={macro.indicators} econ={econ} />
+        </div>
+      )}
       <p className="mt-2 px-1 text-[10px] text-mute">
-        金利の前日比は bp（0.01%）。商品は先物の期近。Yahoo Finance と FRED のデータで、遅延を含む場合があります。{new Date(macro.asOf).toLocaleTimeString('ja-JP')} 更新
+        金利の前日比は bp（0.01%）。商品は先物の期近。● は取引中の市場。Yahoo Finance と FRED のデータで、遅延を含む場合があります。{new Date(macro.asOf).toLocaleTimeString('ja-JP')} 更新
       </p>
     </div>
   );
