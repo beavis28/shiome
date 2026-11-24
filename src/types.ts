@@ -97,6 +97,7 @@ export interface AppConfig {
   fmp: boolean;
   fred: boolean;
   anthropic: boolean;
+  exa?: boolean;
 }
 
 export interface OcrTicker {

@@ -19,11 +19,11 @@ export const api = {
   macro: () => getJson<MacroPayload>('/api/macro'),
   me: () => getJson<{ email: string | null }>('/api/me'),
   /** 相談チャット（回答はテキストのストリームで返る） */
-  chat: async (messages: { role: 'user' | 'assistant'; content: string }[], dashboard: unknown, signal?: AbortSignal) => {
+  chat: async (messages: { role: 'user' | 'assistant'; content: string }[], dashboard: unknown, webSearch: boolean, signal?: AbortSignal) => {
     const res = await fetch('/api/chat', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ messages, dashboard }),
+      body: JSON.stringify({ messages, dashboard, webSearch }),
       signal,
     });
     if (!res.ok) {

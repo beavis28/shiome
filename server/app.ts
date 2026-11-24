@@ -24,6 +24,7 @@ export const config = (): AppConfig => ({
   fmp: !!process.env.FMP_API_KEY,
   fred: !!process.env.FRED_API_KEY,
   anthropic: !!process.env.ANTHROPIC_API_KEY,
+  exa: !!process.env.EXA_API_KEY,
 });
 
 /** worker.ts が Access のログイン情報を入れる */
@@ -37,7 +38,7 @@ api.post('/chat', async (c) => {
   if (!config().anthropic) return c.json({ error: 'ANTHROPIC_API_KEY が未設定です' }, 400);
   const raw = await c.req.text();
   if (raw.length > 300_000) return c.json({ error: '送信データが大きすぎます' }, 413);
-  let body: { messages?: ChatMessage[]; dashboard?: unknown };
+  let body: { messages?: ChatMessage[]; dashboard?: unknown; webSearch?: boolean };
   try {
     body = JSON.parse(raw);
   } catch {
@@ -48,8 +49,8 @@ api.post('/chat', async (c) => {
     .slice(-30)
     .map((m) => ({ role: m.role, content: m.content.slice(0, 8000) }));
   if (!messages.length || messages[messages.length - 1].role !== 'user') return c.json({ error: '質問がありません' }, 400);
-  return new Response(chatStream(messages, body.dashboard ?? {}), {
-    headers: { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store' },
+  return new Response(chatStream(messages, body.dashboard ?? {}, { webSearch: body.webSearch !== false }), {
+    headers: { 'Content-Type': 'application/x-ndjson; charset=utf-8', 'Cache-Control': 'no-store' },
   });
 });
 

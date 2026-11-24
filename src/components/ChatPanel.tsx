@@ -2,10 +2,26 @@ import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { api } from '../lib/api';
 import type { AppConfig } from '../types';
 
+interface Source {
+  title: string;
+  url: string;
+  date: string | null;
+}
 interface Msg {
   role: 'user' | 'assistant';
   content: string;
+  searches?: string[];
+  sources?: Source[];
 }
+
+const WS_KEY = 'shiome.chat.webSearch';
+const readWs = () => {
+  try {
+    return localStorage.getItem(WS_KEY) !== '0';
+  } catch {
+    return true;
+  }
+};
 
 /** 回答の簡易 Markdown（見出し・太字・箇条書き）を表示用に変換 */
 function Rich({ text }: { text: string }) {
@@ -28,6 +44,7 @@ function Rich({ text }: { text: string }) {
 }
 
 const SUGGESTIONS = [
+  '表示中の銘柄の最近のニュースと決算の内容は？',
   'この画面の要点をまとめて',
   'テクニカル指標の状態を説明して',
   '次の決算と経済指標で注目される点は？',
@@ -48,6 +65,8 @@ export function ChatPanel({ open, onClose, config, selected, getContext }: Props
   const [msgs, setMsgs] = useState<Msg[]>([]);
   const [input, setInput] = useState('');
   const [busy, setBusy] = useState(false);
+  const [webSearch, setWebSearch] = useState(readWs);
+  const canSearch = !!config?.exa;
   const abortRef = useRef<AbortController | null>(null);
   const endRef = useRef<HTMLDivElement>(null);
 
@@ -66,14 +85,35 @@ export function ChatPanel({ open, onClose, config, selected, getContext }: Props
     const ac = new AbortController();
     abortRef.current = ac;
     try {
-      const res = await api.chat(history, await getContext(), ac.signal);
+      const res = await api.chat(
+        history.map(({ role, content }) => ({ role, content })),
+        await getContext(),
+        canSearch && webSearch,
+        ac.signal,
+      );
       const reader = res.body!.getReader();
       const dec = new TextDecoder();
+      let buf = '';
+      const patch = (f: (m: Msg) => Msg) => setMsgs((ms) => [...ms.slice(0, -1), f(ms[ms.length - 1])]);
       for (;;) {
         const { done, value } = await reader.read();
         if (done) break;
-        const chunk = dec.decode(value, { stream: true });
-        setMsgs((m) => [...m.slice(0, -1), { role: 'assistant', content: m[m.length - 1].content + chunk }]);
+        buf += dec.decode(value, { stream: true });
+        const lines = buf.split('\n');
+        buf = lines.pop() ?? '';
+        for (const line of lines) {
+          if (!line.trim()) continue;
+          let ev: { t: string; v?: string; q?: string; items?: Source[] };
+          try {
+            ev = JSON.parse(line);
+          } catch {
+            continue;
+          }
+          if (ev.t === 'text') patch((m) => ({ ...m, content: m.content + (ev.v ?? '') }));
+          else if (ev.t === 'search') patch((m) => ({ ...m, searches: [...(m.searches ?? []), ev.q ?? ''] }));
+          else if (ev.t === 'sources') patch((m) => ({ ...m, sources: [...(m.sources ?? []), ...(ev.items ?? [])] }));
+          else if (ev.t === 'error') patch((m) => ({ ...m, content: `${m.content}\n\n⚠ ${ev.v}` }));
+        }
       }
     } catch (e) {
       if (!ac.signal.aborted) {
@@ -96,6 +136,26 @@ export function ChatPanel({ open, onClose, config, selected, getContext }: Props
       <header className="flex items-center gap-2 border-b border-line px-3 py-2">
         <h2 className="text-sm font-semibold">相場の相談</h2>
         <span className="text-[11px] text-mute">{selected ? `${selected} を表示中` : ''} · Claude</span>
+        <label
+          className={`ml-2 flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] ${canSearch && webSearch ? 'border-accent text-accent' : 'border-line text-mute'}`}
+          title={canSearch ? '必要なときに Exa でウェブを検索して答えます' : 'EXA_API_KEY が未設定のため使えません'}
+        >
+          <input
+            type="checkbox"
+            className="accent-sky-400"
+            disabled={!canSearch}
+            checked={canSearch && webSearch}
+            onChange={(e) => {
+              setWebSearch(e.target.checked);
+              try {
+                localStorage.setItem(WS_KEY, e.target.checked ? '1' : '0');
+              } catch {
+                /* 無視 */
+              }
+            }}
+          />
+          🔎 ウェブ検索
+        </label>
         <div className="ml-auto flex gap-1">
           {!!msgs.length && (
             <button
@@ -115,7 +175,7 @@ export function ChatPanel({ open, onClose, config, selected, getContext }: Props
       </header>
 
       <p className="border-b border-line bg-warnc/5 px-3 py-1.5 text-[10px] leading-relaxed text-warnc">
-        画面のデータをもとに情報を整理・解説します。売買の推奨や個別の投資助言は行いません。AI の回答は誤りを含むことがあります。
+        画面のデータ{canSearch && webSearch ? 'とウェブ検索の結果' : ''}をもとに情報を整理・解説します。売買の推奨や個別の投資助言は行いません。AI の回答は誤りを含むことがあります。
       </p>
 
       <div className="min-h-0 flex-1 space-y-3 overflow-auto px-3 py-3">
@@ -141,11 +201,36 @@ export function ChatPanel({ open, onClose, config, selected, getContext }: Props
                 m.role === 'user' ? 'max-w-[85%] rounded-lg bg-accent/15 px-3 py-1.5' : 'text-ink'
               }`}
             >
-              {m.content ? (
+              {!!m.searches?.length && (
+                <div className="mb-1.5 flex flex-wrap gap-1">
+                  {m.searches.map((q, k) => (
+                    <span key={k} className="rounded-full bg-white/5 px-2 py-0.5 text-[10px] text-mute">
+                      🔎 {q}
+                    </span>
+                  ))}
+                </div>
+              )}
+              {m.content.trim() ? (
                 m.role === 'assistant' ? <Rich text={m.content} /> : m.content
               ) : busy && i === msgs.length - 1 ? (
-                <span className="animate-pulse text-mute">考えています…</span>
+                <span className="animate-pulse text-mute">{m.searches?.length ? '検索結果を読んでいます…' : '考えています…'}</span>
               ) : null}
+              {!!m.sources?.length && (
+                <details className="mt-2 rounded border border-line/70 px-2 py-1 text-[11px]" open={m.sources.length <= 6}>
+                  <summary className="cursor-pointer text-mute">出典（{m.sources.length}）</summary>
+                  <ol className="mt-1 space-y-0.5">
+                    {m.sources.map((src, k) => (
+                      <li key={src.url} className="flex gap-1.5">
+                        <span className="num text-mute">{k + 1}.</span>
+                        <a href={src.url} target="_blank" rel="noreferrer noopener" className="min-w-0 flex-1 truncate text-accent hover:underline" title={src.title}>
+                          {src.title || src.url}
+                        </a>
+                        <span className="num shrink-0 text-mute">{src.date ? src.date.slice(0, 10) : new URL(src.url).hostname.replace(/^www\./, '')}</span>
+                      </li>
+                    ))}
+                  </ol>
+                </details>
+              )}
             </div>
           </div>
         ))}
