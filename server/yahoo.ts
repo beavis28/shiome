@@ -20,6 +20,9 @@ export function withYahooSession<T>(fn: () => T): T {
 }
 const client = () => perRequest.getStore() ?? shared;
 
+/** 指数・先物・為替など、記号をそのまま渡すときに使う（BRK.B の変換をしない） */
+export const yahooRaw = client;
+
 /** Yahoo はクラス株を BRK-B のようにハイフンで表す */
 const ySym = (s: string) => s.replace('.', '-');
 

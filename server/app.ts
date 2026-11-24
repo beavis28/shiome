@@ -5,6 +5,7 @@ import type { AppConfig, Valuation } from '../src/types.ts';
 import { chatStream, type ChatMessage } from './chat.ts';
 import { demoStock } from './demo.ts';
 import { fetchEcon } from './econ.ts';
+import { fetchMacro } from './macro.ts';
 import { validateSymbol } from './fmp.ts';
 import { readTickersWithClaude } from './ocr.ts';
 import { fetchQuotes, fetchStock } from './stock.ts';
@@ -103,6 +104,8 @@ api.get('/heatmap', async (c) => {
     return c.json({ error: `ヒートマップのデータを取得できませんでした（${msg(e)}）` }, 502);
   }
 });
+
+api.get('/macro', async (c) => c.json(await fetchMacro()));
 
 api.get('/econ', async (c) => c.json(await fetchEcon()));
 

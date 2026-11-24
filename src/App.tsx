@@ -5,13 +5,14 @@ import { ImportDialog } from './components/ImportDialog';
 import { ChatPanel } from './components/ChatPanel';
 import { CompareView, DEFAULT_METRICS } from './components/CompareView';
 import { HeatmapView } from './components/HeatmapView';
+import { MacroView, MarketStrip } from './components/MacroView';
 import { NewsPanel } from './components/NewsPanel';
 import { buildDashboardContext } from './lib/context';
 import { WatchlistTable } from './components/WatchlistTable';
 import { api } from './lib/api';
 import { derive, type Derived, type StockState } from './lib/derive';
 import { loadWatchlist, saveWatchlist } from './lib/watchlist';
-import type { AppConfig, EconPayload, Valuation } from './types';
+import type { AppConfig, EconPayload, MacroPayload, Valuation } from './types';
 
 const MARKET_LABEL: Record<string, string> = {
   REGULAR: '米国市場 取引中',
@@ -64,7 +65,9 @@ export default function App() {
   const [chatOpen, setChatOpen] = useState(false);
 
   // 銘柄比較（PER・PSR・時価総額など）
-  const [view, setView] = useState<'detail' | 'compare' | 'heatmap'>('detail');
+  const [view, setView] = useState<'detail' | 'compare' | 'heatmap' | 'macro'>('detail');
+  const [macro, setMacro] = useState<MacroPayload | null>(null);
+  const [macroError, setMacroError] = useState<string | null>(null);
   const compareMode = view === 'compare';
   const [compareSel, setCompareSel] = useState<string[]>(() => readLS('shiome.compare.symbols', [] as string[]));
   const [compareMetrics, setCompareMetrics] = useState<(keyof Valuation)[]>(() => readLS('shiome.compare.metrics', DEFAULT_METRICS));
@@ -166,6 +169,28 @@ export default function App() {
     };
   }, [pollMs, config]);
 
+  // 金利・商品・為替（取引時間中は 1 分、それ以外は 5 分ごと）
+  useEffect(() => {
+    let alive = true;
+    const load = () => {
+      if (document.hidden) return;
+      api.macro().then(
+        (m) => {
+          if (!alive) return;
+          setMacro(m);
+          setMacroError(null);
+        },
+        (e) => alive && setMacroError(e instanceof Error ? e.message : String(e)),
+      );
+    };
+    load();
+    const id = setInterval(load, marketActive ? 60_000 : 5 * 60_000);
+    return () => {
+      alive = false;
+      clearInterval(id);
+    };
+  }, [marketActive]);
+
   // ニュースは 5 分ごとに再取得
   useEffect(() => {
     const id = setInterval(() => !document.hidden && setNewsKey((k) => k + 1), 5 * 60_000);
@@ -263,6 +288,7 @@ export default function App() {
               ['detail', '📈 詳細'],
               ['compare', '📊 比較'],
               ['heatmap', '🟩 ヒートマップ'],
+              ['macro', '🌐 金利・商品・為替'],
             ] as const
           ).map(([k, label]) => (
             <button
@@ -300,6 +326,8 @@ export default function App() {
         </div>
       </header>
 
+      <MarketStrip macro={macro} onOpen={() => setView('macro')} />
+
       {configError && (
         <div className="border-b border-downc/40 bg-downc/10 px-4 py-2 text-xs text-downc">
           サーバーに接続できません: {configError}
@@ -328,7 +356,9 @@ export default function App() {
           }
         />
         <div className="min-h-0 min-w-0">
-          {view === 'heatmap' ? (
+          {view === 'macro' ? (
+            <MacroView macro={macro} error={macroError} />
+          ) : view === 'heatmap' ? (
             <HeatmapView
               watchlist={symbols}
               refreshMs={pollMs}
@@ -373,7 +403,19 @@ export default function App() {
         selected={selected}
         getContext={async () => {
           const news = selected ? await api.news(selected).then((r) => r.news, () => []) : [];
-          const ctx = buildDashboardContext({ selected, symbols, states, derived, econ, news, marketState });
+          const base = buildDashboardContext({ selected, symbols, states, derived, econ, news, marketState });
+          const ctx = macro
+            ? {
+                ...base,
+                markets: {
+                  note: 'rates in %, change for rates is in percentage points; others changePct in %',
+                  groups: macro.groups.map((g) => ({
+                    group: g.label,
+                    items: g.items.map((i) => ({ name: i.label, value: i.value, change: i.change, changePct: i.changePct, threeMonthsAgo: i.spark[0]?.[1] ?? null })),
+                  })),
+                },
+              }
+            : base;
           return compareMode
             ? { ...ctx, comparison: { note: 'ratios are fractions (0.12 = 12%); source Yahoo Finance', stocks: compareSymbols.map((s) => valuation.data[s]).filter(Boolean) } }
             : ctx;

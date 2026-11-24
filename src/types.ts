@@ -147,3 +147,30 @@ export interface HeatmapPayload {
   missing: string[];
   asOf: string;
 }
+
+/** 金利・商品・為替などの 1 項目 */
+export interface MacroItem {
+  id: string;
+  label: string;
+  value: number | null;
+  change: number | null; // 前日比（金利は %pt）
+  changePct: number | null;
+  unit: 'pt' | 'yield' | 'usd' | 'fx' | 'index';
+  decimals: number;
+  spark: [string, number][]; // 約 3 か月の日足終値
+  asOf: string | null;
+  source: 'Yahoo' | 'FRED';
+  note?: string;
+}
+
+export interface MacroGroup {
+  key: string;
+  label: string;
+  items: MacroItem[];
+}
+
+export interface MacroPayload {
+  groups: MacroGroup[];
+  warnings: string[];
+  asOf: string;
+}
