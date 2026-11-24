@@ -280,6 +280,13 @@ export default function App() {
           {!chatOpen && <span className="absolute -right-1 -top-1 h-2 w-2 animate-ping rounded-full bg-fuchsia-300 [animation-iteration-count:3]" />}
           💬 AI に相談
         </button>
+        <button
+          onClick={() => setTvOpen((o) => !o)}
+          title="経済ニュースのライブ配信（Bloomberg など）"
+          className={`shrink-0 whitespace-nowrap rounded-md border px-3 py-1 text-xs ${tvOpen ? 'border-accent bg-accent/15 text-accent' : 'border-line hover:bg-white/5'}`}
+        >
+          📺 TV
+        </button>
         {anyDemo && (
           <span className="rounded bg-warnc/15 px-2 py-0.5 text-[11px] text-warnc">
             デモデータ表示中（DEMO=1・実在の株価ではありません）
@@ -318,13 +325,6 @@ export default function App() {
             </button>
           ))}
         </span>
-        <button
-          onClick={() => setTvOpen((o) => !o)}
-          title="経済ニュースのライブ配信（Bloomberg など）"
-          className={`shrink-0 whitespace-nowrap rounded-md border px-3 py-1 text-xs ${tvOpen ? 'border-accent bg-accent/15 text-accent' : 'border-line hover:bg-white/5'}`}
-        >
-          📺 TV
-        </button>
         <div className="ml-auto flex items-center gap-1.5">
           <StatusChip on={config ? !config.demo : undefined} label="Yahoo" offText="デモモード" />
           <StatusChip on={config?.fmp} label="FMP" offText="未設定（Yahoo で代替）" />
