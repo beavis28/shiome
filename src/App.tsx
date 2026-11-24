@@ -254,7 +254,7 @@ export default function App() {
             Shiome
           </span>
         </h1>
-        <button onClick={() => setImportOpen(true)} className="rounded-md bg-accent px-3 py-1 text-xs font-semibold text-bg hover:brightness-110">
+        <button onClick={() => setImportOpen(true)} className="shrink-0 whitespace-nowrap rounded-md bg-accent px-3 py-1 text-xs font-semibold text-bg hover:brightness-110">
           📷 写真から取り込み
         </button>
         <button
@@ -263,9 +263,22 @@ export default function App() {
             loadEcon();
             setNewsKey((k) => k + 1);
           }}
-          className="rounded-md border border-line px-3 py-1 text-xs hover:bg-white/5"
+          className="shrink-0 whitespace-nowrap rounded-md border border-line px-3 py-1 text-xs hover:bg-white/5"
         >
           ↻ 更新
+        </button>
+        <button
+          onClick={() => setChatOpen((o) => !o)}
+          aria-pressed={chatOpen}
+          title="表示中のデータやウェブ検索をもとに、AI に相場について質問できます"
+          className={`relative flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md px-3.5 py-1 text-xs font-semibold shadow-[0_0_0_1px_rgba(255,255,255,.08)] transition ${
+            chatOpen
+              ? 'bg-white text-bg'
+              : 'bg-gradient-to-r from-violet-500 to-fuchsia-500 text-white hover:brightness-110'
+          }`}
+        >
+          {!chatOpen && <span className="absolute -right-1 -top-1 h-2 w-2 animate-ping rounded-full bg-fuchsia-300 [animation-iteration-count:3]" />}
+          💬 AI に相談
         </button>
         {anyDemo && (
           <span className="rounded bg-warnc/15 px-2 py-0.5 text-[11px] text-warnc">
@@ -273,19 +286,19 @@ export default function App() {
           </span>
         )}
         {!anyDemo && (
-          <span className="flex items-center gap-2 text-[11px] text-mute">
+          <span className="flex min-w-0 items-center gap-2 overflow-hidden whitespace-nowrap text-[11px] text-mute">
             <span className={`flex items-center gap-1 ${marketState === 'REGULAR' ? 'text-upc' : marketActive ? 'text-warnc' : ''}`}>
               <i className={`inline-block h-1.5 w-1.5 rounded-full ${marketState === 'REGULAR' ? 'animate-pulse bg-upc' : marketActive ? 'bg-warnc' : 'bg-mute'}`} />
               {MARKET_LABEL[marketState ?? ''] ?? '—'}
             </span>
             {liveAt && (
-              <span className="num">
+              <span className="num truncate">
                 最終更新 {new Date(liveAt).toLocaleTimeString('ja-JP')} · 自動更新 {marketActive ? '20秒' : '5分'}
               </span>
             )}
           </span>
         )}
-        <span className="flex overflow-hidden rounded-md border border-line text-xs" role="tablist" aria-label="表示の切り替え">
+        <span className="flex shrink-0 overflow-hidden rounded-md border border-line text-xs" role="tablist" aria-label="表示の切り替え">
           {(
             [
               ['detail', '📈 詳細'],
@@ -299,7 +312,7 @@ export default function App() {
               role="tab"
               aria-selected={view === k}
               onClick={() => setView(k)}
-              className={`border-l border-line px-2.5 py-1 first:border-l-0 ${view === k ? 'bg-accent/15 text-accent' : 'hover:bg-white/5'}`}
+              className={`whitespace-nowrap border-l border-line px-2.5 py-1 first:border-l-0 ${view === k ? 'bg-accent/15 text-accent' : 'hover:bg-white/5'}`}
             >
               {label}
             </button>
@@ -308,15 +321,9 @@ export default function App() {
         <button
           onClick={() => setTvOpen((o) => !o)}
           title="経済ニュースのライブ配信（Bloomberg など）"
-          className={`rounded-md border px-3 py-1 text-xs ${tvOpen ? 'border-accent bg-accent/15 text-accent' : 'border-line hover:bg-white/5'}`}
+          className={`shrink-0 whitespace-nowrap rounded-md border px-3 py-1 text-xs ${tvOpen ? 'border-accent bg-accent/15 text-accent' : 'border-line hover:bg-white/5'}`}
         >
           📺 TV
-        </button>
-        <button
-          onClick={() => setChatOpen((o) => !o)}
-          className={`rounded-md border px-3 py-1 text-xs ${chatOpen ? 'border-accent bg-accent/15 text-accent' : 'border-line hover:bg-white/5'}`}
-        >
-          💬 相談
         </button>
         <div className="ml-auto flex items-center gap-1.5">
           <StatusChip on={config ? !config.demo : undefined} label="Yahoo" offText="デモモード" />
