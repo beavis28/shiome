@@ -182,14 +182,16 @@ export function CompareView({ symbols, data, errors, loading, focus, onFocus, me
         <Card className="flex flex-1 items-center justify-center text-sm text-mute">左のウォッチリストで、比べたい銘柄にチェックを入れてください</Card>
       ) : (
         <>
-          <div className={`grid min-h-0 flex-[3] gap-2 ${chosen.length > 1 ? 'grid-cols-2' : 'grid-cols-1'} ${chosen.length > 2 ? 'grid-rows-2' : 'grid-rows-1'}`}>
+          <div
+            className={`grid min-h-0 flex-[3] gap-2 max-md:auto-rows-[minmax(220px,auto)] ${chosen.length > 1 ? 'md:grid-cols-2' : ''} ${chosen.length > 2 ? 'md:grid-rows-2' : 'md:grid-rows-1'}`}
+          >
             {chosen.map((m) => (
               <BarChart key={m.key} metric={m} rows={rows} focus={focus} onFocus={onFocus} />
             ))}
           </div>
 
           {/* 全指標の表（グラフの元データ） */}
-          <Card className="flex min-h-0 flex-[2] flex-col" title="指標の一覧" right={<span className="text-[10px] text-mute">見出しをクリックで並べ替え</span>}>
+          <Card className="flex min-h-[320px] flex-[2] flex-col md:min-h-0" title="指標の一覧" right={<span className="text-[10px] text-mute">見出しをクリックで並べ替え</span>}>
             <div className="min-h-0 flex-1 overflow-auto">
               <table className="w-full text-[11px]">
                 <thead className="sticky top-0 bg-panel text-mute">

@@ -112,7 +112,7 @@ export function ImportDialog({ config, existing, onClose, onAdd }: Props) {
           <button onClick={onClose} className="text-mute hover:text-ink">✕</button>
         </header>
 
-        <div className="grid min-h-0 flex-1 grid-cols-2 gap-4 overflow-auto p-4">
+        <div className="grid min-h-0 flex-1 grid-cols-1 gap-4 overflow-auto p-4 md:grid-cols-2">
           {/* 左: 画像 */}
           <div className="flex flex-col gap-3">
             <div

@@ -52,7 +52,7 @@ export function DetailPanel({ symbol, state, d }: { symbol: string; state?: Stoc
   return (
     <div className="flex h-full min-h-0 flex-col gap-2">
       {/* 上段: 銘柄・現在値 / ターゲット価格 / 決算 */}
-      <div className="grid grid-cols-[1fr_1.4fr_0.75fr] gap-2">
+      <div className="grid grid-cols-1 gap-2 md:grid-cols-[1fr_1.4fr_0.75fr]">
         <Card className="px-3 py-2">
           <div className="flex items-baseline gap-2">
             <h1 className="text-xl font-bold">{symbol}</h1>
@@ -147,7 +147,7 @@ export function DetailPanel({ symbol, state, d }: { symbol: string; state?: Stoc
       </Card>
 
       {/* チャート */}
-      <Card className="min-h-0 flex-1">
+      <Card className="flex min-h-[420px] flex-1 flex-col md:min-h-0">
         {d.tech && bars.length ? (
           <PriceChart bars={bars} tech={d.tech} target={p.target.data?.mean} />
         ) : (

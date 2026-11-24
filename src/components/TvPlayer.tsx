@@ -85,7 +85,7 @@ export function TvPlayer({ onClose }: { onClose: () => void }) {
       {expanded && <div className="fixed inset-0 z-[55] bg-black/70" onClick={() => setExpanded(false)} />}
       <div
         ref={boxRef}
-        className={`fixed z-[56] overflow-hidden rounded-xl border border-line bg-panel shadow-2xl ${expanded ? 'left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2' : ''}`}
+        className={`fixed z-[56] overflow-hidden rounded-xl border border-line bg-panel shadow-2xl ${expanded ? 'left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2' : 'max-md:!bottom-[68px] max-md:!left-2 max-md:!w-[calc(100vw-16px)]'}`}
         style={expanded ? { width: 'min(1100px, 92vw)' } : { left: saved.x, bottom: -saved.y, width: saved.w }}
       >
         <div onPointerDown={drag} className={`flex items-center gap-2 border-b border-line px-2.5 py-1.5 ${expanded ? '' : 'cursor-move'}`}>

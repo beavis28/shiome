@@ -15,6 +15,16 @@ import { derive, type Derived, type StockState } from './lib/derive';
 import { loadWatchlist, saveWatchlist } from './lib/watchlist';
 import type { AppConfig, EconPayload, MacroPayload, Valuation } from './types';
 
+type MobileTab = 'list' | 'detail' | 'compare' | 'heatmap' | 'macro' | 'news';
+const MOBILE_TABS: [MobileTab, string, string][] = [
+  ['list', '📋', '銘柄'],
+  ['detail', '📈', '詳細'],
+  ['compare', '📊', '比較'],
+  ['heatmap', '🟩', 'ヒート'],
+  ['macro', '🌐', '市場'],
+  ['news', '📰', 'ニュース'],
+];
+
 const MARKET_LABEL: Record<string, string> = {
   REGULAR: '米国市場 取引中',
   PRE: 'プレマーケット',
@@ -71,7 +81,16 @@ export default function App() {
   const [view, setView] = useState<'detail' | 'compare' | 'heatmap' | 'macro'>('detail');
   const [macro, setMacro] = useState<MacroPayload | null>(null);
   const [macroError, setMacroError] = useState<string | null>(null);
-  const compareMode = view === 'compare';
+  // スマホ（幅 767px 以下）は 1 画面ずつ表示し、下のタブで切り替える
+  const [isMobile, setIsMobile] = useState(() => window.matchMedia('(max-width: 767px)').matches);
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 767px)');
+    const f = () => setIsMobile(mq.matches);
+    mq.addEventListener('change', f);
+    return () => mq.removeEventListener('change', f);
+  }, []);
+  const [mTab, setMTab] = useState<MobileTab>('list');
+  const compareMode = isMobile ? mTab === 'compare' : view === 'compare';
   const [compareSel, setCompareSel] = useState<string[]>(() => readLS('shiome.compare.symbols', [] as string[]));
   const [compareMetrics, setCompareMetrics] = useState<(keyof Valuation)[]>(() => readLS('shiome.compare.metrics', DEFAULT_METRICS));
   const [valuation, setValuation] = useState<{ data: Record<string, Valuation>; errors: Record<string, string> }>({ data: {}, errors: {} });
@@ -246,8 +265,8 @@ export default function App() {
   const anyDemo = symbols.some((s) => states[s]?.data?.demo);
 
   return (
-    <div className="flex h-full min-h-[720px] flex-col">
-      <header className="flex items-center gap-3 border-b border-line bg-panel/60 px-4 py-2">
+    <div className="flex h-[100dvh] flex-col md:h-full md:min-h-[720px]">
+      <header className="flex items-center gap-2 border-b border-line bg-panel/60 px-2 py-2 md:gap-3 md:px-4">
         <h1 className="text-sm font-bold tracking-wide">
           <span className="flex items-baseline gap-1.5">
             <img src="/favicon.svg" alt="" className="h-5 w-5 self-center" />
@@ -255,7 +274,7 @@ export default function App() {
           </span>
         </h1>
         <button onClick={() => setImportOpen(true)} className="shrink-0 whitespace-nowrap rounded-md bg-accent px-3 py-1 text-xs font-semibold text-bg hover:brightness-110">
-          📷 写真から取り込み
+          📷<span className="max-md:hidden"> 写真から取り込み</span>
         </button>
         <button
           onClick={() => {
@@ -265,7 +284,7 @@ export default function App() {
           }}
           className="shrink-0 whitespace-nowrap rounded-md border border-line px-3 py-1 text-xs hover:bg-white/5"
         >
-          ↻ 更新
+          ↻<span className="max-md:hidden"> 更新</span>
         </button>
         <button
           onClick={() => setChatOpen((o) => !o)}
@@ -278,7 +297,7 @@ export default function App() {
           }`}
         >
           {!chatOpen && <span className="absolute -right-1 -top-1 h-2 w-2 animate-ping rounded-full bg-fuchsia-300 [animation-iteration-count:3]" />}
-          💬 AI に相談
+          💬 AI<span className="max-md:hidden"> に相談</span>
         </button>
         <button
           onClick={() => setTvOpen((o) => !o)}
@@ -296,16 +315,16 @@ export default function App() {
           <span className="flex min-w-0 items-center gap-2 overflow-hidden whitespace-nowrap text-[11px] text-mute">
             <span className={`flex items-center gap-1 ${marketState === 'REGULAR' ? 'text-upc' : marketActive ? 'text-warnc' : ''}`}>
               <i className={`inline-block h-1.5 w-1.5 rounded-full ${marketState === 'REGULAR' ? 'animate-pulse bg-upc' : marketActive ? 'bg-warnc' : 'bg-mute'}`} />
-              {MARKET_LABEL[marketState ?? ''] ?? '—'}
+              <span className="max-md:hidden">{MARKET_LABEL[marketState ?? ''] ?? '—'}</span>
             </span>
             {liveAt && (
-              <span className="num truncate">
+              <span className="num truncate max-md:hidden">
                 最終更新 {new Date(liveAt).toLocaleTimeString('ja-JP')} · 自動更新 {marketActive ? '20秒' : '5分'}
               </span>
             )}
           </span>
         )}
-        <span className="flex shrink-0 overflow-hidden rounded-md border border-line text-xs" role="tablist" aria-label="表示の切り替え">
+        <span className="flex shrink-0 overflow-hidden rounded-md border border-line text-xs max-md:hidden" role="tablist" aria-label="表示の切り替え">
           {(
             [
               ['detail', '📈 詳細'],
@@ -325,7 +344,7 @@ export default function App() {
             </button>
           ))}
         </span>
-        <div className="ml-auto flex items-center gap-1.5">
+        <div className="ml-auto flex items-center gap-1.5 max-md:hidden">
           <StatusChip on={config ? !config.demo : undefined} label="Yahoo" offText="デモモード" />
           <StatusChip on={config?.fmp} label="FMP" offText="未設定（Yahoo で代替）" />
           <StatusChip on={config?.fred} label="FRED" offText="未設定" />
@@ -343,72 +362,194 @@ export default function App() {
         </div>
       </header>
 
-      <MarketStrip macro={macro} onOpen={() => setView('macro')} />
+      <MarketStrip macro={macro} onOpen={() => (isMobile ? setMTab('macro') : setView('macro'))} />
 
       {configError && (
         <div className="border-b border-downc/40 bg-downc/10 px-4 py-2 text-xs text-downc">
           サーバーに接続できません: {configError}
         </div>
       )}
-      <main className="grid min-h-0 flex-1 grid-cols-[minmax(375px,26%)_minmax(0,1fr)_minmax(260px,21%)] gap-2 p-2">
-        <WatchlistTable
-          symbols={symbols}
-          states={states}
-          derived={derived}
-          selected={selected}
-          onSelect={setSelected}
-          onRemove={remove}
-          onAdd={(s) => add([s])}
-          compare={
-            compareMode
-              ? {
-                  checked: compareSymbols,
-                  toggle: (s) =>
-                    setCompareSel((cur) => {
-                      const base = cur.filter((x) => symbols.includes(x)).length ? cur : compareSymbols;
-                      return base.includes(s) ? base.filter((x) => x !== s) : [...base, s];
-                    }),
-                }
-              : undefined
-          }
-        />
-        <div className="min-h-0 min-w-0">
-          {view === 'macro' ? (
-            <MacroView macro={macro} error={macroError} econ={econ} />
-          ) : view === 'heatmap' ? (
-            <HeatmapView
-              watchlist={symbols}
-              refreshMs={pollMs}
-              onPick={(sym) => {
-                if (!symbols.includes(sym)) add([sym]);
-                setSelected(sym);
-                setView('detail');
-              }}
-            />
-          ) : compareMode ? (
-            <CompareView
-              symbols={compareSymbols}
-              data={valuation.data}
-              errors={Object.fromEntries(Object.entries(valuation.errors).filter(([k]) => compareSymbols.includes(k)))}
-              loading={valuationLoading}
-              focus={selected}
-              onFocus={setSelected}
-              metrics={compareMetrics}
-              onMetrics={setCompareMetrics}
-            />
-          ) : selected ? (
-            <DetailPanel symbol={selected} state={states[selected]} d={derived[selected]} />
-          ) : (
-            <div className="flex h-full items-center justify-center rounded-lg border border-line bg-panel text-sm text-mute">銘柄を選択してください</div>
-          )}
-        </div>
-        <div className="grid min-h-0 min-w-0 grid-rows-[minmax(0,1fr)_minmax(0,1fr)] gap-2">
-          <NewsPanel symbol={selected} refreshKey={newsKey} />
-          <EconCalendar econ={econ} econError={econError} earnings={earnings} onSelect={setSelected} />
-        </div>
-      </main>
+      {isMobile ? (
+        <>
+          <main className="min-h-0 flex-1 overflow-y-auto p-2 pb-20">
+            {mTab === 'list' && (
+              <div className="flex flex-col gap-3">
+                <WatchlistTable
+                  symbols={symbols}
+                  states={states}
+                  derived={derived}
+                  selected={selected}
+                  onSelect={(s) => {
+                    setSelected(s);
+                    setMTab('detail');
+                  }}
+                  onRemove={remove}
+                  onAdd={(s) => add([s])}
+                />
+                <div className="flex flex-wrap items-center gap-1.5 px-1">
+                  <StatusChip on={config ? !config.demo : undefined} label="Yahoo" offText="デモモード" />
+                  <StatusChip on={config?.fmp} label="FMP" offText="未設定（Yahoo で代替）" />
+                  <StatusChip on={config?.fred} label="FRED" offText="未設定" />
+                  <StatusChip on={config?.anthropic} label="Claude" offText="未設定（OCR使用）" />
+                  {me && (
+                    <span className="ml-auto flex items-center gap-2 text-[11px] text-mute">
+                      <span className="max-w-[160px] truncate">{me}</span>
+                      <a href="/cdn-cgi/access/logout" className="rounded border border-line px-2 py-0.5">
+                        ログアウト
+                      </a>
+                    </span>
+                  )}
+                </div>
+                <p className="px-1 text-[10px] leading-relaxed text-mute">
+                  ⚠ 本アプリは情報提供のみを目的としたもので、投資助言や売買の推奨ではありません。データは遅延・誤りを含む場合があります。投資判断はご自身の責任で行ってください。
+                </p>
+              </div>
+            )}
+            {mTab === 'detail' &&
+              (selected ? (
+                <div className="flex flex-col gap-2">
+                  <DetailPanel symbol={selected} state={states[selected]} d={derived[selected]} />
+                  <div className="h-[420px]">
+                    <NewsPanel symbol={selected} refreshKey={newsKey} />
+                  </div>
+                </div>
+              ) : (
+                <p className="p-6 text-center text-sm text-mute">「銘柄」タブで銘柄を選んでください</p>
+              ))}
+            {mTab === 'compare' && (
+              <div className="flex flex-col gap-2">
+                <div className="flex flex-wrap gap-1.5 rounded-lg border border-line bg-panel p-2">
+                  <span className="w-full text-[11px] text-mute">比べる銘柄（タップで切り替え）</span>
+                  {symbols.map((sym) => {
+                    const on = compareSymbols.includes(sym);
+                    return (
+                      <button
+                        key={sym}
+                        onClick={() =>
+                          setCompareSel((cur) => {
+                            const base = cur.filter((x) => symbols.includes(x)).length ? cur : compareSymbols;
+                            return base.includes(sym) ? base.filter((x) => x !== sym) : [...base, sym];
+                          })
+                        }
+                        className={`rounded-full border px-2.5 py-1 text-xs ${on ? 'border-accent bg-accent/15 text-accent' : 'border-line text-mute'}`}
+                      >
+                        {sym}
+                      </button>
+                    );
+                  })}
+                </div>
+                <CompareView
+                  symbols={compareSymbols}
+                  data={valuation.data}
+                  errors={Object.fromEntries(Object.entries(valuation.errors).filter(([k]) => compareSymbols.includes(k)))}
+                  loading={valuationLoading}
+                  focus={selected}
+                  onFocus={setSelected}
+                  metrics={compareMetrics}
+                  onMetrics={setCompareMetrics}
+                />
+              </div>
+            )}
+            {mTab === 'heatmap' && (
+              <div className="h-[calc(100dvh-210px)] min-h-[460px]">
+                <HeatmapView
+                  watchlist={symbols}
+                  refreshMs={pollMs}
+                  onPick={(sym) => {
+                    if (!symbols.includes(sym)) add([sym]);
+                    setSelected(sym);
+                    setMTab('detail');
+                  }}
+                />
+              </div>
+            )}
+            {mTab === 'macro' && <MacroView macro={macro} error={macroError} econ={econ} />}
+            {mTab === 'news' && (
+              <div className="flex flex-col gap-2">
+                <div className="h-[55vh]">
+                  <NewsPanel symbol={selected} refreshKey={newsKey} />
+                </div>
+                <div className="h-[70vh]">
+                  <EconCalendar econ={econ} econError={econError} earnings={earnings} onSelect={(s) => { setSelected(s); setMTab('detail'); }} />
+                </div>
+              </div>
+            )}
+          </main>
+          <nav className="fixed inset-x-0 bottom-0 z-30 grid grid-cols-6 border-t border-line bg-panel/95 pb-[env(safe-area-inset-bottom)] backdrop-blur" aria-label="画面の切り替え">
+            {MOBILE_TABS.map(([k, icon, label]) => (
+              <button
+                key={k}
+                onClick={() => setMTab(k)}
+                aria-current={mTab === k ? 'page' : undefined}
+                className={`flex flex-col items-center gap-0.5 py-1.5 text-[10px] ${mTab === k ? 'text-accent' : 'text-mute'}`}
+              >
+                <span className="text-lg leading-none">{icon}</span>
+                {label}
+              </button>
+            ))}
+          </nav>
+        </>
+      ) : (
+    <main className="grid min-h-0 flex-1 grid-cols-[minmax(375px,26%)_minmax(0,1fr)_minmax(260px,21%)] gap-2 p-2">
+          <WatchlistTable
+            symbols={symbols}
+            states={states}
+            derived={derived}
+            selected={selected}
+            onSelect={setSelected}
+            onRemove={remove}
+            onAdd={(s) => add([s])}
+            compare={
+              compareMode
+                ? {
+                    checked: compareSymbols,
+                    toggle: (s) =>
+                      setCompareSel((cur) => {
+                        const base = cur.filter((x) => symbols.includes(x)).length ? cur : compareSymbols;
+                        return base.includes(s) ? base.filter((x) => x !== s) : [...base, s];
+                      }),
+                  }
+                : undefined
+            }
+          />
+          <div className="min-h-0 min-w-0">
+            {view === 'macro' ? (
+              <MacroView macro={macro} error={macroError} econ={econ} />
+            ) : view === 'heatmap' ? (
+              <HeatmapView
+                watchlist={symbols}
+                refreshMs={pollMs}
+                onPick={(sym) => {
+                  if (!symbols.includes(sym)) add([sym]);
+                  setSelected(sym);
+                  setView('detail');
+                }}
+              />
+            ) : compareMode ? (
+              <CompareView
+                symbols={compareSymbols}
+                data={valuation.data}
+                errors={Object.fromEntries(Object.entries(valuation.errors).filter(([k]) => compareSymbols.includes(k)))}
+                loading={valuationLoading}
+                focus={selected}
+                onFocus={setSelected}
+                metrics={compareMetrics}
+                onMetrics={setCompareMetrics}
+              />
+            ) : selected ? (
+              <DetailPanel symbol={selected} state={states[selected]} d={derived[selected]} />
+            ) : (
+              <div className="flex h-full items-center justify-center rounded-lg border border-line bg-panel text-sm text-mute">銘柄を選択してください</div>
+            )}
+          </div>
+          <div className="grid min-h-0 min-w-0 grid-rows-[minmax(0,1fr)_minmax(0,1fr)] gap-2">
+            <NewsPanel symbol={selected} refreshKey={newsKey} />
+            <EconCalendar econ={econ} econError={econError} earnings={earnings} onSelect={setSelected} />
+          </div>
+        </main>
+      )}
 
-      <footer className="border-t border-line px-4 py-1 text-[10px] text-mute">
+      <footer className="hidden border-t border-line px-4 py-1 text-[10px] text-mute md:block">
         ⚠ 本アプリは情報提供のみを目的としたもので、投資助言や売買の推奨ではありません。データは遅延・誤りを含む場合があります。投資判断はご自身の責任で行ってください。
         データ: Yahoo Finance（非公式・個人利用）/ Financial Modeling Prep / FRED / FRB（FOMC 日程）
       </footer>

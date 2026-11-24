@@ -50,7 +50,7 @@ export function WatchlistTable({ symbols, states, derived, selected, onSelect, o
 
   const th = (key: SortKey, label: string, cls = '') => (
     <th
-      className={`cursor-pointer select-none px-2 py-1.5 font-medium hover:text-ink ${cls}`}
+      className={`cursor-pointer select-none px-1 py-1.5 md:px-2 font-medium hover:text-ink ${cls}`}
       onClick={() => setSort((s) => (s?.key === key ? (s.dir === 1 ? { key, dir: -1 } : null) : { key, dir: key === 'symbol' || key === 'earnings' ? 1 : -1 }))}
     >
       {label}
@@ -110,7 +110,7 @@ export function WatchlistTable({ symbols, states, derived, selected, onSelect, o
                   onClick={() => onSelect(s)}
                   className={`group cursor-pointer border-t border-line/60 ${active ? 'bg-accent/10' : 'hover:bg-white/[0.03]'}`}
                 >
-                  <td className={`px-2 py-1.5 ${active ? 'border-l-2 border-accent' : 'border-l-2 border-transparent'}`}>
+                  <td className={`px-1 py-1.5 md:px-2 ${active ? 'border-l-2 border-accent' : 'border-l-2 border-transparent'}`}>
                     <div className="flex items-center gap-1">
                       {compare && (
                         <input
@@ -134,16 +134,16 @@ export function WatchlistTable({ symbols, states, derived, selected, onSelect, o
                         ×
                       </button>
                     </div>
-                    <div className="max-w-[110px] truncate text-[10px] text-mute">{st?.loading ? '読み込み中…' : st?.error ? st.error : (q?.name ?? '')}</div>
+                    <div className="max-w-[80px] truncate md:max-w-[110px] text-[10px] text-mute">{st?.loading ? '読み込み中…' : st?.error ? st.error : (q?.name ?? '')}</div>
                   </td>
-                  <td className="num px-2 py-1.5 text-right">
+                  <td className="num px-1 py-1.5 md:px-2 text-right">
                     <div>{fmtPrice(d?.price)}</div>
                     <div className={`text-[10px] ${changeColor(q?.changePercent)}`}>{fmtPct(q?.changePercent, 2)}</div>
                   </td>
-                  <td className={`num px-2 py-1.5 text-right ${changeColor(d?.upside)}`}>
+                  <td className={`num px-1 py-1.5 md:px-2 text-right ${changeColor(d?.upside)}`}>
                     {d?.upside !== null && d?.upside !== undefined ? fmtPct(d.upside) : <span className="text-mute">—</span>}
                   </td>
-                  <td className="px-2 py-1.5 text-center">
+                  <td className="px-1 py-1.5 md:px-2 text-center">
                     <div className="flex flex-col items-center gap-0.5">
                       {r === null ? (
                         <span className="text-mute">—</span>
@@ -155,7 +155,7 @@ export function WatchlistTable({ symbols, states, derived, selected, onSelect, o
                       {macdSig && <span className={`text-[9px] ${macdSig.tone === 'up' ? 'text-upc' : 'text-downc'}`}>MACD{macdSig.tone === 'up' ? '↑' : '↓'}</span>}
                     </div>
                   </td>
-                  <td className="num whitespace-nowrap px-2 py-1.5 text-right">
+                  <td className="num whitespace-nowrap px-1 py-1.5 md:px-2 text-right">
                     <div>{fmtDate(p?.earnings.data?.date)}</div>
                     {days !== null && <div className={`text-[10px] ${days <= 7 ? 'text-warnc' : 'text-mute'}`}>{days === 0 ? '本日' : `あと${days}日`}</div>}
                   </td>

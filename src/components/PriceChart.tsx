@@ -143,8 +143,8 @@ export function PriceChart({ bars, tech, target }: { bars: Bar[]; tech: Technica
   }, [range]);
 
   return (
-    <div className="relative flex h-full min-h-0 flex-col">
-      <div className="flex items-center gap-3 px-3 py-1.5 text-[11px] text-mute">
+    <div className="relative flex h-full min-h-0 flex-1 flex-col">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 px-3 py-1.5 text-[11px] text-mute">
         <span className="flex items-center gap-1"><i className="inline-block h-0.5 w-3 bg-[#facc15]" />SMA20</span>
         <span className="flex items-center gap-1"><i className="inline-block h-0.5 w-3 bg-[#60a5fa]" />SMA50</span>
         <span className="flex items-center gap-1"><i className="inline-block h-0.5 w-3 bg-[#c084fc]" />SMA200</span>

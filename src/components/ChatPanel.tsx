@@ -211,17 +211,17 @@ export function ChatPanel({ open, onClose, config, selected, getContext }: Props
 
   if (!open) return null;
   return (
-    <aside className="fixed bottom-0 right-0 top-0 z-40 flex max-w-[100vw] flex-col border-l border-line bg-panel shadow-2xl" style={{ width }}>
+    <aside className="fixed bottom-0 right-0 top-0 z-40 flex max-w-[100vw] flex-col border-l border-line bg-panel shadow-2xl max-md:!w-screen" style={{ width }}>
       <div
         onPointerDown={startDrag}
         title="ドラッグで幅を変更"
-        className="absolute -left-1 bottom-0 top-0 z-10 w-2 cursor-col-resize hover:bg-accent/30"
+        className="absolute -left-1 bottom-0 top-0 z-10 w-2 cursor-col-resize hover:bg-accent/30 max-md:hidden"
       />
       <header className="flex items-center gap-2 border-b border-line px-3 py-2">
-        <h2 className="text-sm font-semibold">相場の相談</h2>
-        <span className="text-[11px] text-mute">{selected ? `${selected} を表示中` : ''} · Claude</span>
+        <h2 className="whitespace-nowrap text-sm font-semibold">相場の相談</h2>
+        <span className="truncate text-[11px] text-mute max-md:hidden">{selected ? `${selected} を表示中` : ''} · Claude</span>
         <label
-          className={`ml-2 flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] ${canSearch && webSearch ? 'border-accent text-accent' : 'border-line text-mute'}`}
+          className={`ml-2 flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full border px-2 py-0.5 text-[11px] ${canSearch && webSearch ? 'border-accent text-accent' : 'border-line text-mute'}`}
           title={canSearch ? `必要なときにウェブを検索して答えます（${engines.join(' + ')}）` : '検索の API キー（EXA_API_KEY / TAVILY_API_KEY）が未設定のため使えません'}
         >
           <input

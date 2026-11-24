@@ -43,12 +43,14 @@ export function Spark({ pts, decimals, suffix, label, width = 84 }: { pts: [stri
   return (
     <span className="relative inline-block">
       <svg
-        width={W}
+        viewBox={`0 0 ${W} ${H}`}
+        preserveAspectRatio="none"
         height={H}
-        className="block"
+        className={`block ${W === 84 ? 'w-[52px] md:w-[84px]' : ''}`}
+        style={W === 84 ? undefined : { width: W }}
         onMouseMove={(e) => {
           const r = e.currentTarget.getBoundingClientRect();
-          setHi(Math.max(0, Math.min(pts.length - 1, Math.round(((e.clientX - r.left - 2) / (W - 4)) * (pts.length - 1)))));
+          setHi(Math.max(0, Math.min(pts.length - 1, Math.round(((e.clientX - r.left) / r.width) * (pts.length - 1)))));
         }}
         onMouseLeave={() => setHi(null)}
         role="img"
@@ -145,8 +147,8 @@ function Group({ label, items, children }: { label: string; items: MacroItem[]; 
               {i.label}
               {i.note && <span className="ml-0.5 text-[9px] text-mute">ⓘ</span>}
             </span>
-            <span className="num w-[5.5rem] shrink-0 text-right text-xs font-semibold">{fmtMacroValue(i)}</span>
-            <span className={`num w-16 shrink-0 text-right text-[11px] ${changeColor(changeOf(i))}`}>{fmtMacroChange(i)}</span>
+            <span className="num w-[4.75rem] shrink-0 text-right text-xs font-semibold md:w-[5.5rem]">{fmtMacroValue(i)}</span>
+            <span className={`num w-14 shrink-0 text-right text-[11px] md:w-16 ${changeColor(changeOf(i))}`}>{fmtMacroChange(i)}</span>
             <span className="shrink-0">
               <Sparkline item={i} />
             </span>
@@ -181,7 +183,8 @@ function Indicators({ items, econ }: { items: Indicator[]; econ: EconPayload | n
   const next = (key?: string) => (key ? econ?.events.find((e) => e.key === key && e.date >= today)?.date : undefined);
   return (
     <Card title="米国の経済指標（最新の発表）" right={<span className="text-[10px] text-mute">FRED · 推移は約3年</span>}>
-      <table className="w-full text-xs">
+      <div className="overflow-x-auto">
+      <table className="w-full min-w-[560px] text-xs">
         <thead className="text-[10px] text-mute">
           <tr className="border-b border-line">
             <th className="px-3 py-1 text-left font-medium">指標</th>
@@ -216,6 +219,7 @@ function Indicators({ items, econ }: { items: Indicator[]; econ: EconPayload | n
           })}
         </tbody>
       </table>
+      </div>
     </Card>
   );
 }
@@ -233,7 +237,7 @@ export function MacroView({ macro, error, econ }: { macro: MacroPayload | null; 
           {w}
         </p>
       ))}
-      <div className="grid grid-cols-2 gap-2">
+      <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
         <div className="flex flex-col gap-2">
           {g('index') && <Group label={g('index')!.label} items={g('index')!.items} />}
           {g('world') && <Group label={g('world')!.label} items={g('world')!.items} />}
@@ -273,7 +277,7 @@ export function MarketStrip({ macro, onOpen }: { macro: MacroPayload | null; onO
       type="button"
       onClick={onOpen}
       title="クリックで金利・商品・為替の詳細を表示"
-      className="flex w-full items-center gap-4 overflow-hidden whitespace-nowrap border-b border-line bg-panel/40 px-4 py-1 text-left text-[11px] hover:bg-panel/70"
+      className="flex w-full items-center gap-4 overflow-x-auto whitespace-nowrap border-b border-line bg-panel/40 px-4 py-1 text-left text-[11px] hover:bg-panel/70 [scrollbar-width:none]"
     >
       {items.map((i) => (
         <span key={i.id} className="flex items-baseline gap-1.5">
