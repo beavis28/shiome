@@ -60,7 +60,20 @@ export async function withYahooSession<T>(fn: () => Promise<T>): Promise<T> {
     await saveJar(jar, crumb).catch(() => {});
   }
 }
-const client = () => perRequest.getStore() ?? shared;
+// Workers では全リクエスト共通のクライアントは使わない（共有すると crumb の取得を待ち合って止まる）。
+// リクエストごとのクライアントが見つからないときは、保存してある crumb でその場で作る
+const IS_WORKERS = typeof navigator !== 'undefined' && navigator.userAgent === 'Cloudflare-Workers';
+function ephemeral() {
+  console.warn('yahoo: no per-request client; creating one');
+  const store = new MemoryCookieStore();
+  try {
+    if (jarMemo) CookieJar.deserializeSync(JSON.parse(jarMemo.json), store);
+  } catch {
+    /* 空の置き場で始める */
+  }
+  return newClient(new ExtendedCookieJar(store));
+}
+const client = () => perRequest.getStore() ?? (IS_WORKERS ? ephemeral() : shared);
 
 /** 指数・先物・為替など、記号をそのまま渡すときに使う（BRK.B の変換をしない） */
 export const yahooRaw = client;
