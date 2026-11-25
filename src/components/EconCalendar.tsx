@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { daysUntil, etToLocal, fmtDate, localTzLabel } from '../lib/format';
 import { useT } from '../lib/i18n';
 import { econDetail, econLabel } from '../lib/names';
-import type { EconPayload } from '../types';
+import type { EconPayload, FedMeeting } from '../types';
 import { Card } from './ui';
 
 interface Item {
@@ -24,6 +24,50 @@ const KEY_COLOR: Record<string, string> = {
   RETAIL: 'bg-slate-500/25 text-slate-300',
   EARN: 'bg-indigo-500/25 text-indigo-300',
 };
+
+
+// 予測市場（Kalshi）の FOMC の結果の確率。利下げは青緑、据え置きは灰色、利上げは赤橙（色覚の違いでも見分けやすい組み合わせ）
+const OUTCOME: Record<string, { ja: string; en: string; color: string }> = {
+  C26: { ja: '0.5%以上の利下げ', en: 'Cut >25bp', color: '#0f766e' },
+  C25: { ja: '0.25%利下げ', en: 'Cut 25bp', color: '#2dd4bf' },
+  H0: { ja: '据え置き', en: 'Hold', color: '#64748b' },
+  H25: { ja: '0.25%利上げ', en: 'Hike 25bp', color: '#f08a5d' },
+  H26: { ja: '0.5%以上の利上げ', en: 'Hike >25bp', color: '#c2410c' },
+};
+const ORDER = ['C26', 'C25', 'H0', 'H25', 'H26'];
+
+function FedBar({ m }: { m: FedMeeting }) {
+  const { t, lang } = useT();
+  const name = (k: string, fallback: string) => (OUTCOME[k] ? OUTCOME[k][lang] : fallback);
+  const list = [...m.outcomes].sort((a, b) => ORDER.indexOf(a.key) - ORDER.indexOf(b.key));
+  const top = [...m.outcomes].sort((a, b) => b.prob - a.prob).slice(0, 2);
+  const all = list.map((o) => `${name(o.key, o.label)} ${(o.prob * 100).toFixed(0)}%`).join(' / ');
+  return (
+    <a
+      href={m.url}
+      target="_blank"
+      rel="noreferrer noopener"
+      title={`${t('予測市場 Kalshi の価格から計算した確率', 'Odds implied by Kalshi prediction-market prices')}: ${all}`}
+      className="ml-[3.4rem] mr-1 mt-0.5 block rounded px-1 py-0.5 hover:bg-white/5"
+    >
+      <div className="flex h-1.5 overflow-hidden rounded-full bg-white/5">
+        {list.map((o) => (
+          <i key={o.key} style={{ width: `${o.prob * 100}%`, background: OUTCOME[o.key]?.color ?? '#64748b' }} />
+        ))}
+      </div>
+      <div className="mt-0.5 flex flex-wrap gap-x-2 text-[10px] text-mute">
+        {top.map((o) => (
+          <span key={o.key} className="flex items-center gap-1">
+            <i className="inline-block h-1.5 w-1.5 rounded-full" style={{ background: OUTCOME[o.key]?.color ?? '#64748b' }} />
+            <span className="text-ink">{name(o.key, o.label)}</span>
+            <span className="num">{(o.prob * 100).toFixed(0)}%</span>
+          </span>
+        ))}
+        <span className="ml-auto">{t('予測市場', 'Prediction mkt')}</span>
+      </div>
+    </a>
+  );
+}
 
 interface Props {
   econ: EconPayload | null;
@@ -76,9 +120,8 @@ export function EconCalendar({ econ, econError, earnings, onSelect }: Props) {
               </div>
               {items.map((i, n) => {
                 const local = i.timeET ? etToLocal(i.date, i.timeET) : null;
-                return (
+                const row = (
                   <div
-                    key={n}
                     onClick={i.key === 'EARN' ? () => onSelect(i.label) : undefined}
                     className={`flex items-center gap-1.5 rounded px-1 py-0.5 text-xs ${i.key === 'EARN' ? 'cursor-pointer hover:bg-white/5' : ''}`}
                   >
@@ -95,6 +138,13 @@ export function EconCalendar({ econ, econError, earnings, onSelect }: Props) {
                         {local.dayShift ? '+1' : ''}
                       </span>
                     )}
+                  </div>
+                );
+                const fed = i.key === 'FOMC' ? econ?.fed?.meetings.find((m) => m.date === i.date) : undefined;
+                return (
+                  <div key={n}>
+                    {row}
+                    {fed && <FedBar m={fed} />}
                   </div>
                 );
               })}

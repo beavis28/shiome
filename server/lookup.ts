@@ -77,12 +77,18 @@ const COMPANY_NORM = (s: string) =>
     .replace(/\s+/g, ' ')
     .trim();
 
-/** SEC の米国上場企業の一覧 [ティッカー, 社名]（7 日キャッシュ） */
-function companies() {
-  return cached(`sec:companies:v1`, 7 * 24 * HOUR, async () => {
-    const d = (await (await sec('https://www.sec.gov/files/company_tickers.json')).json()) as Record<string, { ticker: string; title: string }>;
-    return Object.values(d).map((r) => [r.ticker.replace('-', '.'), r.title] as [string, string]);
+/** SEC の米国上場企業の一覧 [ティッカー, 社名, CIK]（7 日キャッシュ） */
+export function companies() {
+  return cached(`sec:companies:v2`, 7 * 24 * HOUR, async () => {
+    const d = (await (await sec('https://www.sec.gov/files/company_tickers.json')).json()) as Record<string, { ticker: string; title: string; cik_str: number }>;
+    return Object.values(d).map((r) => [r.ticker.replace('-', '.'), r.title, r.cik_str] as [string, string, number]);
   });
+}
+
+/** ティッカーから SEC の CIK（10 桁）を引く */
+export async function cikOf(symbol: string): Promise<string | null> {
+  const hit = (await companies()).find(([t]) => t === symbol);
+  return hit ? String(hit[2]).padStart(10, '0') : null;
 }
 
 /** 編集距離（打ち間違いの近さ）。隣り合う 2 文字の入れ替え（APLP → AAPL）も 1 回と数える */
@@ -118,7 +124,7 @@ async function fromYahoo(q: string): Promise<Scored[]> {
 }
 
 async function fromSec(q: string): Promise<Scored[]> {
-  const list = await companies().catch(() => [] as [string, string][]);
+  const list = await companies().catch(() => [] as [string, string, number][]);
   const Q = q.toUpperCase();
   const qn = COMPANY_NORM(q);
   const out: Scored[] = [];

@@ -1,5 +1,5 @@
 import { getLang } from './i18n';
-import type { SymbolHit, CongressTrade, FundHoldings, FundSummary, Ownership, AppConfig, EconPayload, NewsItem, OcrTicker, Quote, StockPayload, ValuationPayload, HeatmapPayload, MacroPayload, Prefs } from '../types';
+import type { AnalystData, Filings, SymbolHit, CongressTrade, FundHoldings, FundSummary, Ownership, AppConfig, EconPayload, NewsItem, OcrTicker, Quote, StockPayload, ValuationPayload, HeatmapPayload, MacroPayload, Prefs } from '../types';
 
 const withLang = (init?: RequestInit): RequestInit => ({ ...init, headers: { ...(init?.headers as Record<string, string> | undefined), 'X-Lang': getLang() } });
 
@@ -21,6 +21,8 @@ export const api = {
     getJson<HeatmapPayload>(`/api/heatmap?universe=${universe}${symbols.length ? `&symbols=${encodeURIComponent(symbols.join(','))}` : ''}`),
   search: (q: string, signal?: AbortSignal) =>
     getJson<{ query: string; exact: SymbolHit | null; suggestions: SymbolHit[] }>(`/api/search?q=${encodeURIComponent(q)}`, { signal }),
+  analyst: (symbol: string) => getJson<AnalystData>(`/api/analyst/${encodeURIComponent(symbol)}`),
+  filings: (symbol: string) => getJson<Filings>(`/api/filings/${encodeURIComponent(symbol)}`),
   funds: () => getJson<{ funds: FundSummary[]; enabled: boolean }>('/api/funds'),
   fund: (cik: string) => getJson<FundHoldings>(`/api/funds/${encodeURIComponent(cik)}`),
   ownership: (symbol: string) => getJson<Ownership>(`/api/ownership/${encodeURIComponent(symbol)}`),

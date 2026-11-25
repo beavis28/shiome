@@ -5,7 +5,7 @@ import { api } from '../lib/api';
 import { fmtBig, fmtDate } from '../lib/format';
 import { useT, type Lang } from '../lib/i18n';
 import { managerName } from '../lib/names';
-import type { CongressTrade, FundHoldings, FundPosition, FundSummary, Ownership } from '../types';
+import type { CongressTrade, Filings, FundHoldings, FundPosition, FundSummary, Ownership } from '../types';
 import { Badge, Card } from './ui';
 
 type Tab = 'stock' | 'funds' | 'congress';
@@ -104,6 +104,104 @@ const KIND: Record<Ownership['insiders'][number]['kind'], { label: { ja: string;
   exercise: { label: { ja: 'オプション行使', en: 'Exercise' }, tone: 'neutral' },
   other: { label: { ja: 'その他', en: 'Other' }, tone: 'neutral' },
 };
+
+// ------------------------------------------------------------------ SEC の届け出（Form 144・13D / 13G）
+
+const md = (d: string | null) => (d ? `${Number(d.slice(5, 7))}/${Number(d.slice(8, 10))}` : '—');
+
+function FilingCards({ symbol }: { symbol: string }) {
+  const { t } = useT();
+  const [st, setSt] = useState<{ symbol: string; data: Filings | null; error: string | null } | null>(null);
+  useEffect(() => {
+    let alive = true;
+    api.filings(symbol).then(
+      (d) => alive && setSt({ symbol, data: d, error: null }),
+      (e) => alive && setSt({ symbol, data: null, error: e instanceof Error ? e.message : String(e) }),
+    );
+    return () => {
+      alive = false;
+    };
+  }, [symbol]);
+  const s = st?.symbol === symbol ? st : null;
+  const msg = !s ? t('読み込み中…', 'Loading…') : s.error;
+  const recent = s?.data?.form144.filter((f) => f.saleDate && Date.now() - new Date(f.saleDate).getTime() < 90 * 86400_000) ?? [];
+  const total144 = recent.reduce((a, f) => a + (f.value ?? 0), 0);
+  return (
+    <>
+      <Card title={t('売却予定の届け出（Form 144）', 'Planned insider sales (Form 144)')} right={<span className="text-[10px] text-mute">SEC</span>}>
+        {msg && <p className="p-3 text-xs text-mute">{msg}</p>}
+        {s?.data && (
+          <>
+            <p className="px-3 py-1.5 text-[11px]">
+              <span className="text-mute">{t('直近 90 日の売却予定 ', 'Planned sales, last 90 days ')}</span>
+              <span className="num text-downc">${fmtBig(total144)}</span>
+            </p>
+            <div className="max-h-[260px] overflow-auto">
+              <table className="w-full text-xs">
+                <tbody>
+                  {s.data.form144.map((f) => (
+                    <tr key={f.url} className="border-t border-line/50" title={f.nature ? `${t('取得の経緯', 'Acquired via')}: ${f.nature}` : undefined}>
+                      <td className="num whitespace-nowrap py-1 pl-3 pr-1 text-mute">{md(f.saleDate ?? f.filed)}</td>
+                      <td className="px-2 py-1">
+                        <a href={f.url} target="_blank" rel="noreferrer noopener" className="block max-w-[150px] truncate hover:underline md:max-w-[200px]">
+                          {f.name}
+                        </a>
+                        <div className="max-w-[150px] truncate text-[10px] text-mute md:max-w-[200px]">{f.role || '—'}</div>
+                      </td>
+                      <td className="num whitespace-nowrap px-2 py-1 text-right max-md:hidden">{f.shares ? fmtBig(f.shares) : '—'}</td>
+                      <td className="num whitespace-nowrap py-1 pl-1 pr-3 text-right">{f.value ? `$${fmtBig(f.value)}` : '—'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {!s.data.form144.length && <p className="p-3 text-xs text-mute">{t('直近 1 年の届け出はありません', 'No filings in the last year')}</p>}
+            </div>
+          </>
+        )}
+        <p className="border-t border-line/50 px-3 py-1.5 text-[10px] text-mute">
+          {t(
+            '役員や大株主が株を売る「前」に出す届け出です。実際に売ったとは限りません（売ったかどうかは Form 4 でわかります）。',
+            'Filed by insiders before they sell. A filing does not mean the sale happened; Form 4 confirms actual sales.',
+          )}
+        </p>
+      </Card>
+
+      <Card title={t('5% 以上の大量保有（13D / 13G）', '5%+ holders (13D / 13G)')} right={<span className="text-[10px] text-mute">SEC</span>}>
+        {msg && <p className="p-3 text-xs text-mute">{msg}</p>}
+        {s?.data && (
+          <ul className="text-xs">
+            {s.data.stakes.map((b) => (
+              <li key={b.url} className="flex items-center gap-2 border-t border-line/50 px-3 py-1.5 first:border-t-0">
+                <Badge tone={b.form === '13D' ? 'warn' : 'neutral'} title={b.form === '13D' ? t('経営への関与を目的に含む保有', 'May seek to influence the company') : t('純投資の保有', 'Passive investment')}>
+                  {b.form}
+                  {b.amendment ? t('（変更）', ' amend.') : ''}
+                </Badge>
+                <a href={b.url} target="_blank" rel="noreferrer noopener" className="min-w-0 flex-1 truncate hover:underline" title={b.holders.join(', ')}>
+                  {b.holders[0] ?? '—'}
+                  {b.holders.length > 1 && <span className="text-mute">{t(` 他${b.holders.length - 1}`, ` +${b.holders.length - 1}`)}</span>}
+                </a>
+                <span
+                  className={`num shrink-0 ${b.pct !== null && b.pct < 5 ? 'text-mute' : ''}`}
+                  title={b.pct !== null && b.pct < 5 ? t('5% 未満に減ったことの届け出', 'Filed after dropping below 5%') : undefined}
+                >
+                  {b.pct === null ? '—' : `${b.pct.toFixed(1)}%`}
+                </span>
+                <span className="num w-10 shrink-0 text-right text-[10px] text-mute">{md(b.eventDate ?? b.filed)}</span>
+              </li>
+            ))}
+            {!s.data.stakes.length && <li className="p-3 text-mute">{t('直近 2 年の届け出はありません', 'No filings in the last 2 years')}</li>}
+          </ul>
+        )}
+        <p className="border-t border-line/50 px-3 py-1.5 text-[10px] text-mute">
+          {t(
+            '5% を超えて保有したときの届け出。13D は経営への関与（アクティビスト）を含み、取得から 10 日以内に出ます。13F より早く大口の動きがわかります。',
+            'Filed when a holder passes 5%. 13D means the holder may push for changes (activists) and is due within 10 days, so it shows big moves well before a 13F.',
+          )}
+        </p>
+      </Card>
+    </>
+  );
+}
 
 function StockTab({ symbol, funds, allFunds, onShowFund }: { symbol: string; funds: FundSummary[] | null; allFunds: Record<string, FundHoldings | string>; onShowFund: (cik: string) => void }) {
   const { t, lang } = useT();
@@ -290,6 +388,8 @@ function StockTab({ symbol, funds, allFunds, onShowFund }: { symbol: string; fun
         )}
         {!o?.data && <p className="p-3 text-xs text-mute">{o?.error ?? t('読み込み中…', 'Loading…')}</p>}
       </Card>
+
+      <FilingCards symbol={symbol} />
 
       <Card title={`${t('議員の売買', 'Congress trades')} · ${symbol}`} right={<span className="text-[10px] text-mute">FMP · STOCK Act</span>}>
         <CongressList trades={c?.trades ?? []} error={c?.error ?? null} loading={!c} showSymbol={false} />

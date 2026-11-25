@@ -1,6 +1,7 @@
 import type { Derived, StockState } from '../lib/derive';
 import { daysUntil, fmtBig, fmtDate, fmtPct, fmtPrice } from '../lib/format';
 import type { PriceTarget } from '../types';
+import { AnalystCards } from './AnalystCards';
 import { PriceChart } from './PriceChart';
 import { Badge, Card, changeColor } from './ui';
 import { useT } from '../lib/i18n';
@@ -149,6 +150,9 @@ export function DetailPanel({ symbol, state, d }: { symbol: string; state?: Stoc
           <span className="text-xs text-mute">{p.history.error ?? t('価格履歴が不足しています', 'Not enough price history')}</span>
         )}
       </Card>
+
+      {/* アナリスト・需給（折りたたみ可） */}
+      <AnalystCards symbol={symbol} />
 
       {/* チャート */}
       <Card className="flex min-h-[420px] flex-1 flex-col md:min-h-0">

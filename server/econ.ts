@@ -6,6 +6,7 @@
 import { tx } from './lang.ts';
 import type { EconEvent, EconPayload } from '../src/types.ts';
 import { cached, HOUR } from './cache.ts';
+import { fedOdds } from './fed.ts';
 
 const FOMC_MEETINGS: { start: string; end: string; note?: string }[] = [
   { start: '2026-01-27', end: '2026-01-28' },
@@ -105,7 +106,9 @@ export async function fetchEcon(): Promise<EconPayload> {
   }
   const from = new Date(Date.now() - 2 * 86400_000).toISOString().slice(0, 10);
   const to = new Date(Date.now() + 120 * 86400_000).toISOString().slice(0, 10);
+  const fed = await fedOdds().catch(() => null); // 取れなくてもカレンダーは出す
   return {
+    fed,
     events: events.filter((e) => e.date >= from && e.date <= to).sort((a, b) => (a.date + a.timeET).localeCompare(b.date + b.timeET)),
     warnings,
   };

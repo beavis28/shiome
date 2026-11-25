@@ -2,7 +2,7 @@
 // 仕様変更で突然取れなくなることがあるため、呼び出し側で FMP にフォールバックする。
 import { tx } from './lang.ts';
 import YahooFinance from 'yahoo-finance2';
-import type { Bar, Earnings, HeatItem, NewsItem, PriceTarget, Quote, Valuation } from '../src/types.ts';
+import type { AnalystData, Bar, Earnings, HeatItem, NewsItem, PriceTarget, Quote, Valuation } from '../src/types.ts';
 import { MAJOR_SECTOR, SECTOR_JA } from './universe.ts';
 import { cached, HOUR, MIN } from './cache.ts';
 
@@ -241,5 +241,95 @@ export function yahooNews(symbol: string) {
     const direct = items.filter((n) => n.related.includes(symbol));
     const other = items.filter((n) => !n.related.includes(symbol));
     return [...direct, ...other].filter((n) => n.title && /^https:\/\//.test(n.link)).slice(0, 15);
+  });
+}
+
+/** アナリストの評価の変更・業績予想の推移・決算サプライズ・空売り（6 時間キャッシュ） */
+export function yahooAnalyst(symbol: string) {
+  return cached(`yf:analyst:${symbol}`, 6 * HOUR, async (): Promise<AnalystData> => {
+    const r = JSON.parse(
+      JSON.stringify(
+        await client().quoteSummary(
+          ySym(symbol),
+          { modules: ['upgradeDowngradeHistory', 'recommendationTrend', 'earningsTrend', 'earningsHistory', 'defaultKeyStatistics'] },
+          { validateResult: false },
+        ),
+      ),
+    ) as {
+      upgradeDowngradeHistory?: { history?: Record<string, unknown>[] };
+      recommendationTrend?: { trend?: Record<string, unknown>[] };
+      earningsTrend?: { trend?: Record<string, unknown>[] };
+      earningsHistory?: { history?: Record<string, unknown>[] };
+      defaultKeyStatistics?: Record<string, unknown>;
+    };
+    const day = (v: unknown) => iso(v)?.slice(0, 10) ?? null;
+    const since = new Date(Date.now() - 365 * 86400_000).toISOString().slice(0, 10);
+    const ratings = (r.upgradeDowngradeHistory?.history ?? [])
+      .map((h) => ({
+        date: day(h.epochGradeDate) ?? '',
+        firm: String(h.firm ?? ''),
+        from: String(h.fromGrade ?? ''),
+        to: String(h.toGrade ?? ''),
+        action: String(h.action ?? ''),
+        ptAction: String(h.priceTargetAction ?? ''),
+        pt: num(h.currentPriceTarget) || null,
+        priorPt: num(h.priorPriceTarget) || null,
+      }))
+      .filter((h) => h.date >= since)
+      .slice(0, 40);
+    const estimates = (r.earningsTrend?.trend ?? [])
+      .filter((t) => ['0q', '+1q', '0y', '+1y'].includes(String(t.period)))
+      .map((t) => {
+        const ee = (t.earningsEstimate ?? {}) as Record<string, unknown>;
+        const re = (t.revenueEstimate ?? {}) as Record<string, unknown>;
+        const tr = (t.epsTrend ?? {}) as Record<string, unknown>;
+        const rv = (t.epsRevisions ?? {}) as Record<string, unknown>;
+        return {
+          period: String(t.period),
+          endDate: day(t.endDate),
+          eps: num(ee.avg) ?? num(tr.current),
+          eps7d: num(tr['7daysAgo']),
+          eps30d: num(tr['30daysAgo']),
+          eps90d: num(tr['90daysAgo']),
+          up30: num(rv.upLast30days),
+          down30: num(rv.downLast30days),
+          analysts: num(ee.numberOfAnalysts),
+          revenue: num(re.avg),
+          growth: num(t.growth),
+        };
+      });
+    const surprises = (r.earningsHistory?.history ?? []).map((h) => ({
+      quarter: day(h.quarter),
+      actual: num(h.epsActual),
+      estimate: num(h.epsEstimate),
+      surprisePct: num(h.surprisePercent),
+    }));
+    const k = r.defaultKeyStatistics ?? {};
+    const shares = num(k.sharesShort);
+    return {
+      symbol,
+      ratings,
+      recommendation: (r.recommendationTrend?.trend ?? []).slice(0, 4).map((t) => ({
+        period: String(t.period),
+        strongBuy: num(t.strongBuy) ?? 0,
+        buy: num(t.buy) ?? 0,
+        hold: num(t.hold) ?? 0,
+        sell: num(t.sell) ?? 0,
+        strongSell: num(t.strongSell) ?? 0,
+      })),
+      estimates,
+      surprises,
+      short:
+        shares === null && num(k.shortPercentOfFloat) === null
+          ? null
+          : {
+              shares,
+              prior: num(k.sharesShortPriorMonth), // 日付として返ってくることがあるので数値のときだけ使う
+              pctFloat: num(k.shortPercentOfFloat),
+              daysToCover: num(k.shortRatio),
+              date: day(k.dateShortInterest),
+              priorDate: day(k.sharesShortPreviousMonthDate),
+            },
+    };
   });
 }

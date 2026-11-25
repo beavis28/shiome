@@ -79,6 +79,7 @@ export interface EconEvent {
 export interface EconPayload {
   events: EconEvent[];
   warnings: string[];
+  fed?: { meetings: FedMeeting[]; asOf: string } | null; // 予測市場の FOMC の確率
 }
 
 export interface NewsItem {
@@ -306,4 +307,73 @@ export interface SymbolHit {
   name: string;
   exchange: string;
   type: '株式' | 'ETF';
+}
+
+/** アナリストの評価の変更・業績予想・空売り（Yahoo Finance） */
+export interface AnalystData {
+  symbol: string;
+  ratings: {
+    date: string; // YYYY-MM-DD
+    firm: string;
+    from: string;
+    to: string;
+    action: 'up' | 'down' | 'main' | 'init' | 'reit' | string; // up=格上げ down=格下げ main=据え置き init=新規
+    ptAction: string; // Raises / Lowers / Maintains / Announces
+    pt: number | null;
+    priorPt: number | null;
+  }[];
+  recommendation: { period: string; strongBuy: number; buy: number; hold: number; sell: number; strongSell: number }[];
+  estimates: {
+    period: string; // 0q=今期 +1q=来期 0y=今年度 +1y=来年度
+    endDate: string | null;
+    eps: number | null;
+    eps7d: number | null;
+    eps30d: number | null;
+    eps90d: number | null;
+    up30: number | null;
+    down30: number | null;
+    analysts: number | null;
+    revenue: number | null;
+    growth: number | null;
+  }[];
+  surprises: { quarter: string | null; actual: number | null; estimate: number | null; surprisePct: number | null }[];
+  short: { shares: number | null; prior: number | null; pctFloat: number | null; daysToCover: number | null; date: string | null; priorDate: string | null } | null;
+}
+
+/** 役員などの売却予定（SEC Form 144） */
+export interface Form144 {
+  filed: string;
+  saleDate: string | null;
+  name: string;
+  role: string;
+  shares: number | null;
+  value: number | null;
+  pctOut: number | null; // 発行済株式に対する割合（0.001 = 0.1%）
+  nature: string; // 取得の経緯（RSU・ストックオプションなど）
+  url: string;
+}
+
+/** 5% 以上の大量保有（SEC Schedule 13D / 13G） */
+export interface BigStake {
+  form: '13D' | '13G'; // 13D = 経営に関与する目的もある / 13G = 純投資
+  amendment: boolean;
+  filed: string;
+  eventDate: string | null;
+  holders: string[];
+  pct: number | null; // % 単位（8.5 = 8.5%）
+  shares: number | null;
+  url: string;
+}
+
+export interface Filings {
+  symbol: string;
+  form144: Form144[];
+  stakes: BigStake[];
+}
+
+/** 予測市場（Kalshi）での FOMC の結果の確率 */
+export interface FedMeeting {
+  date: string; // 発表日（米国東部時間の日付）
+  outcomes: { key: string; label: string; prob: number }[]; // key: C26 / C25 / H0 / H25 / H26
+  url: string;
 }

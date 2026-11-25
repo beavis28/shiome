@@ -15,7 +15,8 @@ import { fetchQuotes, fetchStock } from './stock.ts';
 import { lookupSymbols } from './lookup.ts';
 import { congressTrades, FUNDS, fundHoldings, ownership } from './smart.ts';
 import { MAJOR_SYMBOLS } from './universe.ts';
-import { yahooHeatmap, yahooNews, yahooValuation } from './yahoo.ts';
+import { yahooAnalyst, yahooHeatmap, yahooNews, yahooValuation } from './yahoo.ts';
+import { filingsFor } from './filings.ts';
 
 const SYMBOL_RE = /^[A-Z]{1,5}([.-][A-Z]{1,2})?$/;
 const parseSymbols = (v: unknown) =>
@@ -165,6 +166,27 @@ api.get('/ownership/:symbol', async (c) => {
     return c.json(await ownership(symbol));
   } catch (e) {
     return c.json({ error: tx(`保有者のデータを取得できませんでした（${msg(e)}）`, `Could not load holder data (${msg(e)})`) }, 502);
+  }
+});
+
+api.get('/analyst/:symbol', async (c) => {
+  const symbol = c.req.param('symbol').toUpperCase();
+  if (!SYMBOL_RE.test(symbol)) return c.json({ error: tx('ティッカーの形式が正しくありません', 'Invalid ticker format') }, 400);
+  try {
+    return c.json(await yahooAnalyst(symbol));
+  } catch (e) {
+    return c.json({ error: tx(`アナリストのデータを取得できませんでした（${msg(e)}）`, `Could not load analyst data (${msg(e)})`) }, 502);
+  }
+});
+
+api.get('/filings/:symbol', async (c) => {
+  const symbol = c.req.param('symbol').toUpperCase();
+  if (!SYMBOL_RE.test(symbol)) return c.json({ error: tx('ティッカーの形式が正しくありません', 'Invalid ticker format') }, 400);
+  if (!config().sec) return c.json({ error: tx('SEC_USER_AGENT が未設定です', 'SEC_USER_AGENT is not set') }, 400);
+  try {
+    return c.json(await filingsFor(symbol));
+  } catch (e) {
+    return c.json({ error: tx(`SEC の届け出を取得できませんでした（${msg(e)}）`, `Could not load SEC filings (${msg(e)})`) }, 502);
   }
 });
 
