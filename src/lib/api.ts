@@ -1,4 +1,4 @@
-import type { CongressTrade, FundHoldings, FundSummary, Ownership, AppConfig, EconPayload, NewsItem, OcrTicker, Quote, StockPayload, ValuationPayload, HeatmapPayload, MacroPayload, Prefs } from '../types';
+import type { SymbolHit, CongressTrade, FundHoldings, FundSummary, Ownership, AppConfig, EconPayload, NewsItem, OcrTicker, Quote, StockPayload, ValuationPayload, HeatmapPayload, MacroPayload, Prefs } from '../types';
 
 async function getJson<T>(url: string, init?: RequestInit): Promise<T> {
   const res = await fetch(url, init);
@@ -16,6 +16,8 @@ export const api = {
   valuation: (symbols: string[]) => getJson<ValuationPayload>(`/api/valuation?symbols=${encodeURIComponent(symbols.join(','))}`),
   heatmap: (universe: 'major' | 'watchlist', symbols: string[]) =>
     getJson<HeatmapPayload>(`/api/heatmap?universe=${universe}${symbols.length ? `&symbols=${encodeURIComponent(symbols.join(','))}` : ''}`),
+  search: (q: string, signal?: AbortSignal) =>
+    getJson<{ query: string; exact: SymbolHit | null; suggestions: SymbolHit[] }>(`/api/search?q=${encodeURIComponent(q)}`, { signal }),
   funds: () => getJson<{ funds: FundSummary[]; enabled: boolean }>('/api/funds'),
   fund: (cik: string) => getJson<FundHoldings>(`/api/funds/${encodeURIComponent(cik)}`),
   ownership: (symbol: string) => getJson<Ownership>(`/api/ownership/${encodeURIComponent(symbol)}`),

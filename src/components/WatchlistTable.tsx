@@ -1,6 +1,7 @@
-import { useMemo, useState, type FormEvent } from 'react';
+import { useMemo, useState } from 'react';
 import type { Derived, StockState } from '../lib/derive';
 import { daysUntil, fmtDate, fmtPct, fmtPrice } from '../lib/format';
+import { TickerAdd } from './TickerAdd';
 import { Badge, Card, changeColor } from './ui';
 
 type SortKey = 'symbol' | 'change' | 'upside' | 'rsi' | 'earnings';
@@ -19,7 +20,6 @@ interface Props {
 
 export function WatchlistTable({ symbols, states, derived, selected, onSelect, onRemove, onAdd, compare }: Props) {
   const [sort, setSort] = useState<{ key: SortKey; dir: 1 | -1 } | null>(null);
-  const [input, setInput] = useState('');
 
   const rows = useMemo(() => {
     const val = (s: string): number | string | null => {
@@ -58,29 +58,12 @@ export function WatchlistTable({ symbols, states, derived, selected, onSelect, o
     </th>
   );
 
-  const submit = (e: FormEvent) => {
-    e.preventDefault();
-    input
-      .toUpperCase()
-      .split(/[\s,]+/)
-      .filter(Boolean)
-      .forEach(onAdd);
-    setInput('');
-  };
-
   return (
     <Card
       title={`ウォッチリスト（${symbols.length}）`}
       className="flex min-h-0 flex-col"
       right={
-        <form onSubmit={submit} className="flex gap-1">
-          <input
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            placeholder="ティッカー追加"
-            className="w-28 rounded border border-line bg-bg px-2 py-0.5 text-xs uppercase outline-none placeholder:normal-case focus:border-accent"
-          />
-        </form>
+        <TickerAdd symbols={symbols} onAdd={onAdd} onRemove={onRemove} />
       }
     >
       <div className="min-h-0 flex-1 overflow-auto">

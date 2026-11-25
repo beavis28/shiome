@@ -299,3 +299,11 @@ export interface CongressTrade {
   district: string;
   link: string | null;
 }
+
+/** ティッカー検索の候補 */
+export interface SymbolHit {
+  symbol: string;
+  name: string;
+  exchange: string;
+  type: '株式' | 'ETF';
+}

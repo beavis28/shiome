@@ -29,7 +29,7 @@ const day = (v: unknown) => iso(v)?.slice(0, 10) ?? null;
 // ---------------------------------------------------------------- SEC 13F
 
 /** SEC は連絡先（名前とメールアドレス）入りの User-Agent を求める。各自が .env / Secret に設定する */
-async function sec(url: string): Promise<Response> {
+export async function sec(url: string): Promise<Response> {
   const ua = process.env.SEC_USER_AGENT;
   if (!ua) throw new Error('SEC_USER_AGENT が未設定です');
   const res = await fetch(url, { headers: { 'User-Agent': ua, Accept: 'application/json, application/xml, */*' } });

@@ -11,6 +11,7 @@ import { loadPrefs, prefsAvailable, sanitize, savePrefs } from './prefs.ts';
 import { validateSymbol } from './fmp.ts';
 import { readTickersWithClaude } from './ocr.ts';
 import { fetchQuotes, fetchStock } from './stock.ts';
+import { lookupSymbols } from './lookup.ts';
 import { congressTrades, FUNDS, fundHoldings, ownership } from './smart.ts';
 import { MAJOR_SYMBOLS } from './universe.ts';
 import { yahooHeatmap, yahooNews, yahooValuation } from './yahoo.ts';
@@ -177,6 +178,17 @@ api.get('/congress', async (c) => {
 api.get('/macro', async (c) => c.json(await fetchMacro()));
 
 api.get('/econ', async (c) => c.json(await fetchEcon()));
+
+// ティッカーの候補（打ち間違い・会社名・日本語名から）
+api.get('/search', async (c) => {
+  const q = (c.req.query('q') ?? '').trim();
+  if (!q) return c.json({ query: '', exact: null, suggestions: [] });
+  try {
+    return c.json(await lookupSymbols(q));
+  } catch (e) {
+    return c.json({ error: `候補を探せませんでした（${msg(e)}）` }, 502);
+  }
+});
 
 api.get('/validate', async (c) => {
   const symbols = parseSymbols(c.req.query('symbols')).slice(0, 30);
