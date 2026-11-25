@@ -2,6 +2,7 @@
 //  - 現在値と前日比: Yahoo Finance（まとめて 1 回で取得、60 秒キャッシュ）
 //  - 約 3 か月の推移: Yahoo の日足（1 時間キャッシュ）
 //  - 2 年債・FF 金利・10年-2年差: FRED（6 時間キャッシュ。FRED_API_KEY がある場合のみ）
+import { tx } from './lang.ts';
 import type { Indicator, MacroGroup, MacroItem, MacroPayload } from '../src/types.ts';
 import { cached, HOUR } from './cache.ts';
 import { yahooRaw } from './yahoo.ts';
@@ -102,7 +103,7 @@ async function fredSeries(def: Def, key: string): Promise<MacroItem> {
     const start = new Date(Date.now() - 100 * 86400_000).toISOString().slice(0, 10);
     const qs = new URLSearchParams({ series_id: def.id, api_key: key, file_type: 'json', observation_start: start, sort_order: 'asc' });
     const res = await fetch(`https://api.stlouisfed.org/fred/series/observations?${qs}`);
-    if (!res.ok) throw new Error(`FRED エラー (${res.status})`);
+    if (!res.ok) throw new Error(tx(`FRED エラー (${res.status})`, `FRED error (${res.status})`));
     const j = (await res.json()) as { observations?: { date: string; value: string }[] };
     return (j.observations ?? []).filter((o) => o.value !== '.').map((o) => [o.date, Number(o.value)] as [string, number]);
   });
@@ -144,7 +145,7 @@ async function fetchIndicators(key: string, warnings: string[]): Promise<Indicat
       cached(`macro:ind:${d.id}:${d.units}`, 6 * HOUR, async () => {
         const qs = new URLSearchParams({ series_id: d.id, api_key: key, file_type: 'json', units: d.units, observation_start: start, sort_order: 'asc' });
         const r = await fetch(`https://api.stlouisfed.org/fred/series/observations?${qs}`);
-        if (!r.ok) throw new Error(`FRED エラー (${r.status})`);
+        if (!r.ok) throw new Error(tx(`FRED エラー (${r.status})`, `FRED error (${r.status})`));
         const j = (await r.json()) as { observations?: { date: string; value: string }[] };
         let obs = (j.observations ?? []).filter((o) => o.value !== '.').map((o) => [o.date, Number(o.value)] as [string, number]);
         if (d.id === 'ICSA') obs = obs.map(([t, v]) => [t, v / 1000] as [string, number]); // 千件
@@ -170,7 +171,7 @@ async function fetchIndicators(key: string, warnings: string[]): Promise<Indicat
     ),
   );
   const out = res.flatMap((r) => (r.status === 'fulfilled' ? [r.value] : []));
-  if (out.length < INDICATORS.length) warnings.push('FRED の経済指標を一部取得できませんでした');
+  if (out.length < INDICATORS.length) warnings.push(tx('FRED の経済指標を一部取得できませんでした', 'Some FRED indicators could not be loaded'));
   return out;
 }
 
@@ -230,12 +231,12 @@ export async function fetchMacro(): Promise<MacroPayload> {
     const fred = await Promise.allSettled(FRED_SERIES.map((d) => fredSeries(d, key)));
     const rates = groups.find((g) => g.key === 'rates')!;
     const extra = fred.flatMap((r) => (r.status === 'fulfilled' ? [r.value] : []));
-    if (extra.length < FRED_SERIES.length) warnings.push('FRED の金利データを一部取得できませんでした');
+    if (extra.length < FRED_SERIES.length) warnings.push(tx('FRED の金利データを一部取得できませんでした', 'Some FRED rate series could not be loaded'));
     // 政策金利 → 3か月 → 2年 → 5年 → 10年 → 30年 → 10年-2年 の順に並べる
     const by = Object.fromEntries([...rates.items, ...extra].map((i) => [i.id, i]));
     rates.items = ['DFF', '^IRX', 'DGS2', '^FVX', '^TNX', '^TYX', 'T10Y2Y'].map((id) => by[id]).filter(Boolean);
   } else {
-    warnings.push('FRED_API_KEY が未設定のため、2 年債・FF 金利・10年-2年差は表示されません');
+    warnings.push(tx('FRED_API_KEY が未設定のため、2 年債・FF 金利・10年-2年差は表示されません', 'FRED_API_KEY is not set, so the 2Y yield, fed funds and 10Y-2Y spread are hidden'));
   }
 
   const indicators = key ? await fetchIndicators(key, warnings) : [];

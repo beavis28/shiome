@@ -1,5 +1,6 @@
 // テクニカル指標の計算（日足終値ベース）
 import type { Bar } from '../types';
+import { tr } from './i18n';
 
 export type Series = (number | null)[];
 
@@ -142,9 +143,9 @@ export function computeTechnicals(bars: Bar[]): Technicals {
     signals.push({
       key: 'rsi',
       label: 'RSI(14)',
-      value: r >= 70 ? `買われすぎ ${r.toFixed(0)}` : r <= 30 ? `売られすぎ ${r.toFixed(0)}` : `中立 ${r.toFixed(0)}`,
+      value: `${r >= 70 ? tr('買われすぎ', 'Overbought') : r <= 30 ? tr('売られすぎ', 'Oversold') : tr('中立', 'Neutral')} ${r.toFixed(0)}`,
       tone: r >= 70 ? 'down' : r <= 30 ? 'up' : 'neutral',
-      hint: '70以上=買われすぎ、30以下=売られすぎの目安',
+      hint: tr('70以上=買われすぎ、30以下=売られすぎの目安', '70+ = overbought, 30 or below = oversold (rule of thumb)'),
     });
   }
 
@@ -162,19 +163,35 @@ export function computeTechnicals(bars: Bar[]): Technicals {
     signals.push({
       key: 'macd',
       label: 'MACD',
-      value: cross === 'golden' ? 'GC（直近）' : cross === 'dead' ? 'DC（直近）' : m > ms ? 'シグナル上' : 'シグナル下',
+      value:
+        cross === 'golden'
+          ? tr('GC（直近）', 'Bull cross')
+          : cross === 'dead'
+            ? tr('DC（直近）', 'Bear cross')
+            : m > ms
+              ? tr('シグナル上', 'Above signal')
+              : tr('シグナル下', 'Below signal'),
       tone: cross === 'golden' || (!cross && m > ms) ? 'up' : 'down',
-      hint: 'MACD(12,26,9)。GC=MACDがシグナルを上抜け、DC=下抜け（5営業日以内）',
+      hint: tr('MACD(12,26,9)。GC=MACDがシグナルを上抜け、DC=下抜け（5営業日以内）', 'MACD(12,26,9). Bull cross = MACD crossed above signal, bear cross = below (within 5 trading days)'),
     });
   }
 
   if (pB !== null) {
     signals.push({
       key: 'bb',
-      label: 'ボリンジャー',
-      value: pB > 1 ? '+2σ 超え' : pB < 0 ? '−2σ 割れ' : pB > 0.8 ? '上限付近' : pB < 0.2 ? '下限付近' : `%B ${(pB * 100).toFixed(0)}`,
+      label: tr('ボリンジャー', 'Bollinger'),
+      value:
+        pB > 1
+          ? tr('+2σ 超え', 'Above +2σ')
+          : pB < 0
+            ? tr('−2σ 割れ', 'Below −2σ')
+            : pB > 0.8
+              ? tr('上限付近', 'Near upper')
+              : pB < 0.2
+                ? tr('下限付近', 'Near lower')
+                : `%B ${(pB * 100).toFixed(0)}`,
       tone: pB > 1 ? 'warn' : pB < 0 ? 'warn' : 'neutral',
-      hint: 'BB(20, 2σ)。%B=バンド内の位置（0=下限、100=上限）',
+      hint: tr('BB(20, 2σ)。%B=バンド内の位置（0=下限、100=上限）', 'BB(20, 2σ). %B = position within the band (0 = lower, 100 = upper)'),
     });
   }
 
@@ -182,9 +199,16 @@ export function computeTechnicals(bars: Bar[]): Technicals {
     signals.push({
       key: 'trend',
       label: 'SMA50/200',
-      value: s50 > s200 ? (price > s50 ? '上昇トレンド' : '50日線割れ') : price < s50 ? '下降トレンド' : '50日線上',
+      value:
+        s50 > s200
+          ? price > s50
+            ? tr('上昇トレンド', 'Uptrend')
+            : tr('50日線割れ', 'Below 50D')
+          : price < s50
+            ? tr('下降トレンド', 'Downtrend')
+            : tr('50日線上', 'Above 50D'),
       tone: s50 > s200 ? (price > s50 ? 'up' : 'warn') : price < s50 ? 'down' : 'warn',
-      hint: '50日線と200日線の位置関係、および株価と50日線の位置',
+      hint: tr('50日線と200日線の位置関係、および株価と50日線の位置', '50-day vs 200-day MA, and price vs the 50-day MA'),
     });
   }
 

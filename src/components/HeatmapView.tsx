@@ -4,6 +4,8 @@ import { fmtBig, fmtPrice } from '../lib/format';
 import { squarify, type Rect } from '../lib/treemap';
 import type { HeatItem } from '../types';
 import { Card } from './ui';
+import { pick, useT } from '../lib/i18n';
+import { sectorLabel } from '../lib/names';
 
 // 色は「上昇・下落」の向きだけを表す 2 色＋中央のグレー（暗い背景・色覚の違いで検証済み）
 const UP = [13, 148, 136]; // #0d9488
@@ -11,10 +13,11 @@ const DOWN = [224, 83, 61]; // #e0533d
 const MID = [52, 60, 78]; // 変化なし
 
 type Period = 'change1d' | 'vs50d' | 'change52w';
-const PERIODS: { key: Period; label: string; range: number; hint: string }[] = [
-  { key: 'change1d', label: '1日', range: 3, hint: '前日終値からの変化率' },
-  { key: 'vs50d', label: '50日線乖離', range: 15, hint: '50 日移動平均からの乖離率' },
-  { key: 'change52w', label: '52週', range: 50, hint: '52 週前からの変化率' },
+type JaEn = { ja: string; en: string };
+const PERIODS: { key: Period; label: JaEn; range: number; hint: JaEn }[] = [
+  { key: 'change1d', label: { ja: '1日', en: '1D' }, range: 3, hint: { ja: '前日終値からの変化率', en: 'Change from previous close' } },
+  { key: 'vs50d', label: { ja: '50日線乖離', en: 'vs 50D MA' }, range: 15, hint: { ja: '50 日移動平均からの乖離率', en: 'Distance from the 50-day moving average' } },
+  { key: 'change52w', label: { ja: '52週', en: '52W' }, range: 50, hint: { ja: '52 週前からの変化率', en: 'Change over 52 weeks' } },
 ];
 
 function color(v: number | null, range: number) {
@@ -34,6 +37,7 @@ interface Props {
 }
 
 export function HeatmapView({ watchlist, refreshMs, onPick }: Props) {
+  const { t, lang } = useT();
   const [universe, setUniverse] = useState<'major' | 'watchlist'>('major');
   const [period, setPeriod] = useState<Period>('change1d');
   const [items, setItems] = useState<HeatItem[]>([]);
@@ -109,11 +113,11 @@ export function HeatmapView({ watchlist, refreshMs, onPick }: Props) {
     <div className="flex h-full min-h-0 flex-col gap-2">
       <Card className="flex flex-wrap items-center gap-x-4 gap-y-1.5 px-3 py-2">
         <span className="flex items-center gap-1">
-          <span className="text-[10px] text-mute">対象</span>
+          <span className="text-[10px] text-mute">{t('対象', 'Universe')}</span>
           {(
             [
-              ['major', '主要米国株（約120銘柄）'],
-              ['watchlist', 'ウォッチリスト'],
+              ['major', t('主要米国株（約120銘柄）', 'Major US stocks (~120)')],
+              ['watchlist', t('ウォッチリスト', 'Watchlist')],
             ] as const
           ).map(([k, label]) => (
             <button
@@ -127,16 +131,16 @@ export function HeatmapView({ watchlist, refreshMs, onPick }: Props) {
           ))}
         </span>
         <span className="flex items-center gap-1">
-          <span className="text-[10px] text-mute">期間</span>
+          <span className="text-[10px] text-mute">{t('期間', 'Period')}</span>
           {PERIODS.map((x) => (
             <button
               key={x.key}
-              title={x.hint}
+              title={pick(x.hint, lang)}
               aria-pressed={period === x.key}
               onClick={() => setPeriod(x.key)}
               className={`rounded-full border px-2 py-0.5 text-[11px] ${period === x.key ? 'border-accent bg-accent/15 text-accent' : 'border-line text-mute hover:text-ink'}`}
             >
-              {x.label}
+              {pick(x.label, lang)}
             </button>
           ))}
         </span>
@@ -148,10 +152,10 @@ export function HeatmapView({ watchlist, refreshMs, onPick }: Props) {
             style={{ background: `linear-gradient(90deg, rgb(${DOWN}), rgb(${MID}), rgb(${UP}))` }}
           />
           <span className="num">+{p.range}%</span>
-          <span>· 面積 = 時価総額</span>
+          <span>{t('· 面積 = 時価総額', '· Area = market cap')}</span>
         </span>
         <span className="num ml-auto text-[10px] text-mute">
-          {loading ? '更新中…' : asOf ? `${new Date(asOf).toLocaleTimeString('ja-JP')} 時点 · Yahoo Finance` : ''}
+          {loading ? t('更新中…', 'Updating…') : asOf ? t(`${new Date(asOf).toLocaleTimeString('ja-JP')} 時点 · Yahoo Finance`, `As of ${new Date(asOf).toLocaleTimeString('en-US')} · Yahoo Finance`) : ''}
         </span>
       </Card>
 
@@ -159,11 +163,11 @@ export function HeatmapView({ watchlist, refreshMs, onPick }: Props) {
       <Card className="flex flex-wrap gap-1 px-2 py-1.5">
         {sectorSummary.map((s) => (
           <span key={s.name} className="flex items-center gap-1.5 rounded px-1.5 py-0.5 text-[11px]" style={{ background: color(s.avg, p.range) }}>
-            <span className="text-white/90">{s.name}</span>
+            <span className="text-white/90">{sectorLabel(s.name, lang)}</span>
             <span className="num font-semibold text-white">{fmtChg(s.avg)}</span>
           </span>
         ))}
-        {!sectorSummary.length && <span className="px-1 text-[11px] text-mute">{error ?? '読み込み中…'}</span>}
+        {!sectorSummary.length && <span className="px-1 text-[11px] text-mute">{error ?? t('読み込み中…', 'Loading…')}</span>}
       </Card>
 
       <Card className="relative min-h-0 flex-1 overflow-hidden p-1">
@@ -175,7 +179,7 @@ export function HeatmapView({ watchlist, refreshMs, onPick }: Props) {
                   className="absolute truncate px-1 text-[10px] font-semibold leading-[15px] text-mute"
                   style={{ left: s.rect.x, top: s.rect.y, width: s.rect.w }}
                 >
-                  {s.name} <span className="num font-normal">{fmtChg(s.avg)}</span>
+                  {sectorLabel(s.name, lang)} <span className="num font-normal">{fmtChg(s.avg)}</span>
                 </div>
               )}
               {s.tiles.map(({ it, r }) => (
@@ -191,27 +195,32 @@ export function HeatmapView({ watchlist, refreshMs, onPick }: Props) {
               <div className="font-semibold">
                 {hover.item.symbol} <span className="font-normal text-mute">{hover.item.name}</span>
               </div>
-              <div className="text-mute">{hover.item.sector}</div>
+              <div className="text-mute">{sectorLabel(hover.item.sector, lang)}</div>
               <div className="num mt-1 grid grid-cols-2 gap-x-2">
-                <span className="text-mute">株価</span>
+                <span className="text-mute">{t('株価', 'Price')}</span>
                 <span className="text-right">${fmtPrice(hover.item.price)}</span>
-                <span className="text-mute">時価総額</span>
+                <span className="text-mute">{t('時価総額', 'Market cap')}</span>
                 <span className="text-right">${fmtBig(hover.item.marketCap)}</span>
-                <span className="text-mute">1日</span>
+                <span className="text-mute">{t('1日', '1D')}</span>
                 <span className="text-right">{fmtChg(hover.item.change1d)}</span>
-                <span className="text-mute">50日線乖離</span>
+                <span className="text-mute">{t('50日線乖離', 'vs 50D MA')}</span>
                 <span className="text-right">{fmtChg(hover.item.vs50d)}</span>
-                <span className="text-mute">52週</span>
+                <span className="text-mute">{t('52週', '52W')}</span>
                 <span className="text-right">{fmtChg(hover.item.change52w)}</span>
               </div>
               <div className="mt-1 text-[10px] text-accent">
-                {watchlist.includes(hover.item.symbol) ? 'クリックで詳細を表示' : 'クリックでウォッチリストに追加して詳細を表示'}
+                {watchlist.includes(hover.item.symbol) ? t('クリックで詳細を表示', 'Click for details') : t('クリックでウォッチリストに追加して詳細を表示', 'Click to add to watchlist and view details')}
               </div>
             </div>
           )}
         </div>
       </Card>
-      <p className="px-1 text-[10px] text-mute">主要米国株は時価総額の大きい約 120 銘柄の手動リストです。業界は Yahoo Finance の分類にもとづきます。</p>
+      <p className="px-1 text-[10px] text-mute">
+        {t(
+          '主要米国株は時価総額の大きい約 120 銘柄の手動リストです。業界は Yahoo Finance の分類にもとづきます。',
+          'Major US stocks is a hand-picked list of ~120 of the largest companies by market cap. Sectors follow Yahoo Finance classification.',
+        )}
+      </p>
     </div>
   );
 }

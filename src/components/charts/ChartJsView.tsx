@@ -3,6 +3,7 @@ import { useEffect, useRef } from 'react';
 import Chart from 'chart.js/auto';
 import type { ChartConfiguration, Plugin } from 'chart.js';
 import type { ChartSpec } from '../../types';
+import { tr, useLang } from '../../lib/i18n';
 import { alpha, fmtNum, GRID, INK, MUTE, NEG, PALETTE, SURFACE } from './palette';
 
 Chart.defaults.color = MUTE;
@@ -125,7 +126,7 @@ function build(spec: ChartSpec): ChartConfiguration {
             callbacks: {
               label: (c) => {
                 const p = c.raw as { x: number; y: number; label: string; raw?: number };
-                return ` ${p.label}: ${spec.xTitle ?? 'x'} ${fmtNum(p.x)} / ${spec.yTitle ?? 'y'} ${fmtNum(p.y)}${p.raw !== undefined ? ` / 大きさ ${fmtNum(p.raw)}` : ''}`;
+                return ` ${p.label}: ${spec.xTitle ?? 'x'} ${fmtNum(p.x)} / ${spec.yTitle ?? 'y'} ${fmtNum(p.y)}${p.raw !== undefined ? ` / ${tr('大きさ', 'Size')} ${fmtNum(p.raw)}` : ''}`;
               },
             },
           },
@@ -179,13 +180,15 @@ function build(spec: ChartSpec): ChartConfiguration {
 
 export default function ChartJsView({ spec }: { spec: ChartSpec }) {
   const ref = useRef<HTMLCanvasElement>(null);
+  const lang = useLang();
   useEffect(() => {
     if (!ref.current) return;
     const cfg = build(spec);
     cfg.options = { ...cfg.options, responsive: true, maintainAspectRatio: false, animation: { duration: 500 } };
     const chart = new Chart(ref.current, cfg);
     return () => chart.destroy();
-  }, [spec]);
+    // lang: ツールチップの文言を切り替えるため作り直す
+  }, [spec, lang]);
   const tall = spec.kind === 'hbar' ? Math.max(200, (spec.labels?.length ?? 5) * 26 * Math.max(1, (spec.series?.length ?? 1) * 0.6)) : spec.kind === 'doughnut' || spec.kind === 'radar' ? 260 : 240;
   return (
     <div className="relative w-full" style={{ height: tall }}>

@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import type { Derived, StockState } from '../lib/derive';
 import { daysUntil, fmtDate, fmtPct, fmtPrice } from '../lib/format';
+import { useT } from '../lib/i18n';
 import { TickerAdd } from './TickerAdd';
 import { Badge, Card, changeColor } from './ui';
 
@@ -20,6 +21,7 @@ interface Props {
 
 export function WatchlistTable({ symbols, states, derived, selected, onSelect, onRemove, onAdd, compare }: Props) {
   const [sort, setSort] = useState<{ key: SortKey; dir: 1 | -1 } | null>(null);
+  const { t } = useT();
 
   const rows = useMemo(() => {
     const val = (s: string): number | string | null => {
@@ -60,7 +62,7 @@ export function WatchlistTable({ symbols, states, derived, selected, onSelect, o
 
   return (
     <Card
-      title={`ウォッチリスト（${symbols.length}）`}
+      title={t(`ウォッチリスト（${symbols.length}）`, `Watchlist (${symbols.length})`)}
       className="flex min-h-0 flex-col"
       right={
         <TickerAdd symbols={symbols} onAdd={onAdd} onRemove={onRemove} />
@@ -70,11 +72,11 @@ export function WatchlistTable({ symbols, states, derived, selected, onSelect, o
         <table className="w-full text-xs">
           <thead className="sticky top-0 z-10 bg-panel text-left text-[11px] text-mute">
             <tr>
-              {th('symbol', '銘柄')}
-              {th('change', '現在値', 'text-right')}
-              {th('upside', '目標乖離', 'text-right')}
+              {th('symbol', t('銘柄', 'Symbol'))}
+              {th('change', t('現在値', 'Price'), 'text-right')}
+              {th('upside', t('目標乖離', 'vs target'), 'text-right')}
               {th('rsi', 'RSI', 'text-center')}
-              {th('earnings', '決算', 'text-right')}
+              {th('earnings', t('決算', 'Earnings'), 'text-right')}
             </tr>
           </thead>
           <tbody>
@@ -98,7 +100,7 @@ export function WatchlistTable({ symbols, states, derived, selected, onSelect, o
                       {compare && (
                         <input
                           type="checkbox"
-                          aria-label={`${s} を比較に含める`}
+                          aria-label={t(`${s} を比較に含める`, `Include ${s} in comparison`)}
                           checked={compare.checked.includes(s)}
                           onClick={(e) => e.stopPropagation()}
                           onChange={() => compare.toggle(s)}
@@ -107,7 +109,7 @@ export function WatchlistTable({ symbols, states, derived, selected, onSelect, o
                       )}
                       <span className="font-semibold">{s}</span>
                       <button
-                        title="ウォッチリストから外す"
+                        title={t('ウォッチリストから外す', 'Remove from watchlist')}
                         onClick={(e) => {
                           e.stopPropagation();
                           onRemove(s);
@@ -117,7 +119,7 @@ export function WatchlistTable({ symbols, states, derived, selected, onSelect, o
                         ×
                       </button>
                     </div>
-                    <div className="max-w-[80px] truncate md:max-w-[110px] text-[10px] text-mute">{st?.loading ? '読み込み中…' : st?.error ? st.error : (q?.name ?? '')}</div>
+                    <div className="max-w-[80px] truncate md:max-w-[110px] text-[10px] text-mute">{st?.loading ? t('読み込み中…', 'Loading…') : st?.error ? st.error : (q?.name ?? '')}</div>
                   </td>
                   <td className="num px-1 py-1.5 md:px-2 text-right">
                     <div>{fmtPrice(d?.price)}</div>
@@ -131,7 +133,7 @@ export function WatchlistTable({ symbols, states, derived, selected, onSelect, o
                       {r === null ? (
                         <span className="text-mute">—</span>
                       ) : (
-                        <Badge tone={r >= 70 ? 'down' : r <= 30 ? 'up' : 'neutral'} title={r >= 70 ? '買われすぎ' : r <= 30 ? '売られすぎ' : '中立'}>
+                        <Badge tone={r >= 70 ? 'down' : r <= 30 ? 'up' : 'neutral'} title={r >= 70 ? t('買われすぎ', 'Overbought') : r <= 30 ? t('売られすぎ', 'Oversold') : t('中立', 'Neutral')}>
                           {r.toFixed(0)}
                         </Badge>
                       )}
@@ -140,14 +142,14 @@ export function WatchlistTable({ symbols, states, derived, selected, onSelect, o
                   </td>
                   <td className="num whitespace-nowrap px-1 py-1.5 md:px-2 text-right">
                     <div>{fmtDate(p?.earnings.data?.date)}</div>
-                    {days !== null && <div className={`text-[10px] ${days <= 7 ? 'text-warnc' : 'text-mute'}`}>{days === 0 ? '本日' : `あと${days}日`}</div>}
+                    {days !== null && <div className={`text-[10px] ${days <= 7 ? 'text-warnc' : 'text-mute'}`}>{days === 0 ? t('本日', 'Today') : t(`あと${days}日`, `in ${days}d`)}</div>}
                   </td>
                 </tr>
               );
             })}
           </tbody>
         </table>
-        {!symbols.length && <p className="p-4 text-center text-xs text-mute">「写真から取り込み」かティッカー入力で銘柄を追加してください</p>}
+        {!symbols.length && <p className="p-4 text-center text-xs text-mute">{t('「写真から取り込み」かティッカー入力で銘柄を追加してください', 'Add stocks with “Import from photo” or by typing a ticker')}</p>}
       </div>
     </Card>
   );

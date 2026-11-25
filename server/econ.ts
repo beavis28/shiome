@@ -3,6 +3,7 @@
 //  - FOMC: FRB 公表の日程（下の FOMC_MEETINGS）。FRB が日程を変更したらここを更新する。
 //    出典: https://www.federalreserve.gov/monetarypolicy/fomccalendars.htm
 //    2027 年分は 2026-11-12 改定版（10月会合は戦略討議のみで政策決定なし、最終会合は 11/16-17）。
+import { tx } from './lang.ts';
 import type { EconEvent, EconPayload } from '../src/types.ts';
 import { cached, HOUR } from './cache.ts';
 
@@ -67,9 +68,9 @@ async function fredRelease(rel: (typeof FRED_RELEASES)[number], apiKey: string):
     if (!res.ok) {
       const body = (await res.json().catch(() => ({}))) as { error_message?: string };
       if (/api_key/i.test(body.error_message ?? '')) {
-        throw new Error('FRED_API_KEY が正しくありません（FRED のキーは英小文字と数字の 32 文字です）');
+        throw new Error(tx('FRED_API_KEY が正しくありません（FRED のキーは英小文字と数字の 32 文字です）', 'FRED_API_KEY is invalid (FRED keys are 32 lowercase letters and digits)'));
       }
-      throw new Error(`FRED エラー (${res.status})`);
+      throw new Error(tx(`FRED エラー (${res.status})`, `FRED error (${res.status})`));
     }
     const json = (await res.json()) as { release_dates?: { date: string }[] };
     const dates = [...new Set((json.release_dates ?? []).map((d) => d.date))];
@@ -89,7 +90,7 @@ export async function fetchEcon(): Promise<EconPayload> {
   const events: EconEvent[] = [...fomcEvents()];
   const key = process.env.FRED_API_KEY;
   if (!key) {
-    warnings.push('FRED_API_KEY が未設定のため、FOMC 以外の指標は表示されません');
+    warnings.push(tx('FRED_API_KEY が未設定のため、FOMC 以外の指標は表示されません', 'FRED_API_KEY is not set, so only FOMC dates are shown'));
   } else {
     const results = await Promise.allSettled(FRED_RELEASES.map((r) => fredRelease(r, key)));
     const failed = new Map<string, string[]>();
@@ -97,10 +98,10 @@ export async function fetchEcon(): Promise<EconPayload> {
       if (r.status === 'fulfilled') events.push(...r.value);
       else {
         const m = r.reason instanceof Error ? r.reason.message : String(r.reason);
-        failed.set(m, [...(failed.get(m) ?? []), FRED_RELEASES[i].label.replace(/（.*）/, '')]);
+        failed.set(m, [...(failed.get(m) ?? []), tx(FRED_RELEASES[i].label.replace(/（.*）/, ''), FRED_RELEASES[i].key)]);
       }
     });
-    for (const [m, labels] of failed) warnings.push(labels.length === FRED_RELEASES.length ? m : `${labels.join('・')}: ${m}`);
+    for (const [m, labels] of failed) warnings.push(labels.length === FRED_RELEASES.length ? m : `${labels.join(tx('・', ', '))}: ${m}`);
   }
   const from = new Date(Date.now() - 2 * 86400_000).toISOString().slice(0, 10);
   const to = new Date(Date.now() + 120 * 86400_000).toISOString().slice(0, 10);

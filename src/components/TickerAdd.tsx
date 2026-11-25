@@ -1,6 +1,7 @@
 // ティッカーの追加欄。入力中に候補を出し、見つからないティッカーは「これですか？」と候補を示す
 import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
 import { api } from '../lib/api';
+import { useT } from '../lib/i18n';
 import type { SymbolHit } from '../types';
 
 type Unresolved = { token: string; suggestions: SymbolHit[] };
@@ -26,6 +27,7 @@ const splitTokens = (text: string) => {
 };
 
 function Hit({ h, active, onPick, have }: { h: SymbolHit; active?: boolean; onPick: () => void; have: boolean }) {
+  const { t } = useT();
   return (
     <button
       type="button"
@@ -35,7 +37,7 @@ function Hit({ h, active, onPick, have }: { h: SymbolHit; active?: boolean; onPi
     >
       <span className="w-14 shrink-0 font-semibold text-accent">{h.symbol}</span>
       <span className="min-w-0 flex-1 truncate text-[11px] text-ink">{h.name || '—'}</span>
-      <span className="shrink-0 text-[10px] text-mute">{have ? '追加済み' : [h.type === 'ETF' ? 'ETF' : '', h.exchange].filter(Boolean).join(' · ')}</span>
+      <span className="shrink-0 text-[10px] text-mute">{have ? t('追加済み', 'Added') : [h.type === 'ETF' ? 'ETF' : '', h.exchange].filter(Boolean).join(' · ')}</span>
     </button>
   );
 }
@@ -48,6 +50,7 @@ export function TickerAdd({ symbols, onAdd, onRemove }: { symbols: string[]; onA
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<Notice | null>(null);
   const box = useRef<HTMLDivElement>(null);
+  const { t } = useT();
   const have = new Set(symbols);
 
   // 入力中の候補（1 語だけのとき。少し待ってから調べる）
@@ -150,7 +153,7 @@ export function TickerAdd({ symbols, onAdd, onRemove }: { symbols: string[]; onA
         onFocus={() => setFocus(true)}
         onBlur={() => setFocus(false)}
         onKeyDown={onKey}
-        placeholder="ティッカー・社名を追加"
+        placeholder={t('ティッカー・社名を追加', 'Add ticker or company')}
         aria-autocomplete="list"
         className="w-36 rounded border border-line bg-bg px-2 py-0.5 text-xs outline-none placeholder:text-mute focus:border-accent"
       />
@@ -164,8 +167,9 @@ export function TickerAdd({ symbols, onAdd, onRemove }: { symbols: string[]; onA
           {notice?.unresolved.map((u) => (
             <div key={u.token} className="mb-1">
               <p className="px-2 pb-0.5 pt-1 text-[11px]">
-                <span className="font-semibold text-warnc">「{u.token}」</span>
-                {u.suggestions.length ? 'は見つかりませんでした。これですか？' : 'に近い銘柄は見つかりませんでした。'}
+                {t('', 'No match for ')}
+                <span className="font-semibold text-warnc">{t(`「${u.token}」`, `“${u.token}”`)}</span>
+                {u.suggestions.length ? t('は見つかりませんでした。これですか？', '. Did you mean:') : t('に近い銘柄は見つかりませんでした。', ' or anything close.')}
               </p>
               {u.suggestions.map((h) => (
                 <Hit key={h.symbol} h={h} onPick={() => pick(h)} have={have.has(h.symbol)} />
@@ -177,18 +181,18 @@ export function TickerAdd({ symbols, onAdd, onRemove }: { symbols: string[]; onA
             <div className="px-2 py-1 text-[11px]">
               <p>
                 <span className="font-semibold">{notice.alt.from}</span>
-                <span className="text-mute">（{notice.added.find((a) => a.symbol === notice.alt!.from)?.name || '—'}）を追加しました。</span>
+                <span className="text-mute">{t(`（${notice.added.find((a) => a.symbol === notice.alt!.from)?.name || '—'}）を追加しました。`, ` (${notice.added.find((a) => a.symbol === notice.alt!.from)?.name || '—'}) added.`)}</span>
               </p>
-              <p className="mt-1 text-mute">もしかしてこちらですか？（押すと入れ替えます）</p>
+              <p className="mt-1 text-mute">{t('もしかしてこちらですか？（押すと入れ替えます）', 'Did you mean one of these? (click to swap)')}</p>
               {notice.alt.to.map((h) => (
                 <Hit key={h.symbol} h={h} onPick={() => pick(h, notice.alt!.from)} have={have.has(h.symbol)} />
               ))}
             </div>
           )}
 
-          {notice && notice.dup.length > 0 && <p className="px-2 py-1 text-[11px] text-mute">{notice.dup.join(', ')} はすでにウォッチリストにあります。</p>}
+          {notice && notice.dup.length > 0 && <p className="px-2 py-1 text-[11px] text-mute">{t(`${notice.dup.join(', ')} はすでにウォッチリストにあります。`, `${notice.dup.join(', ')} already in watchlist.`)}</p>}
           {notice && notice.added.length > 0 && notice.unresolved.length > 0 && (
-            <p className="border-t border-line px-2 py-1 text-[11px] text-mute">追加しました: {notice.added.map((a) => a.symbol).join(', ')}</p>
+            <p className="border-t border-line px-2 py-1 text-[11px] text-mute">{t('追加しました: ', 'Added: ')}{notice.added.map((a) => a.symbol).join(', ')}</p>
           )}
         </div>
       )}

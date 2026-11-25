@@ -1,3 +1,5 @@
+import { getLang } from './i18n';
+
 export const fmtPrice = (v: number | null | undefined) =>
   v === null || v === undefined ? '—' : v.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
@@ -26,10 +28,11 @@ export function daysUntil(date: string | null | undefined): number | null {
 }
 
 const WD = ['日', '月', '火', '水', '木', '金', '土'];
+const WD_EN = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 export function fmtDate(date: string | null | undefined) {
   if (!date) return '—';
   const d = new Date(date + 'T12:00:00Z');
-  return `${d.getUTCMonth() + 1}/${d.getUTCDate()}(${WD[d.getUTCDay()]})`;
+  return getLang() === 'en' ? `${d.getUTCMonth() + 1}/${d.getUTCDate()} ${WD_EN[d.getUTCDay()]}` : `${d.getUTCMonth() + 1}/${d.getUTCDate()}(${WD[d.getUTCDay()]})`;
 }
 
 /** 米国東部時間の日時を、閲覧者のローカル時刻（例: "21:30"）に変換 */

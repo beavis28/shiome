@@ -1,5 +1,7 @@
 import { useMemo, useState } from 'react';
 import { daysUntil, etToLocal, fmtDate, localTzLabel } from '../lib/format';
+import { useT } from '../lib/i18n';
+import { econDetail, econLabel } from '../lib/names';
 import type { EconPayload } from '../types';
 import { Card } from './ui';
 
@@ -32,10 +34,11 @@ interface Props {
 
 export function EconCalendar({ econ, econError, earnings, onSelect }: Props) {
   const [showEarnings, setShowEarnings] = useState(true);
+  const { t, lang } = useT();
   const groups = useMemo(() => {
-    const items: Item[] = (econ?.events ?? []).map((e) => ({ ...e }));
+    const items: Item[] = (econ?.events ?? []).map((e) => ({ ...e, label: econLabel(e, lang), detail: econDetail(e, lang) }));
     if (showEarnings) {
-      for (const e of earnings) items.push({ date: e.date, timeET: null, key: 'EARN', label: e.symbol, detail: '決算発表', importance: 'earnings' });
+      for (const e of earnings) items.push({ date: e.date, timeET: null, key: 'EARN', label: e.symbol, detail: t('決算発表', 'Earnings report'), importance: 'earnings' });
     }
     const map = new Map<string, Item[]>();
     items
@@ -43,16 +46,16 @@ export function EconCalendar({ econ, econError, earnings, onSelect }: Props) {
       .sort((a, b) => (a.date + (a.timeET ?? '99')).localeCompare(b.date + (b.timeET ?? '99')))
       .forEach((i) => map.set(i.date, [...(map.get(i.date) ?? []), i]));
     return [...map.entries()].slice(0, 40);
-  }, [econ, earnings, showEarnings]);
+  }, [econ, earnings, showEarnings, lang, t]);
 
   return (
     <Card
-      title="経済指標・決算カレンダー"
+      title={t('経済指標・決算カレンダー', 'Econ & earnings calendar')}
       className="flex min-h-0 min-w-0 flex-col"
       right={
         <label className="flex items-center gap-1 text-[11px] text-mute">
           <input type="checkbox" checked={showEarnings} onChange={(e) => setShowEarnings(e.target.checked)} className="accent-indigo-400" />
-          決算
+          {t('決算', 'Earnings')}
         </label>
       }
     >
@@ -69,7 +72,7 @@ export function EconCalendar({ econ, econError, earnings, onSelect }: Props) {
             <div key={date} className="border-b border-line/50 py-1.5 last:border-0">
               <div className="mb-0.5 flex items-baseline justify-between px-1">
                 <span className={`num text-xs font-semibold ${days <= 7 ? 'text-ink' : 'text-mute'}`}>{fmtDate(date)}</span>
-                <span className={`text-[10px] ${days === 0 ? 'text-warnc' : 'text-mute'}`}>{days === 0 ? '本日' : `${days}日後`}</span>
+                <span className={`text-[10px] ${days === 0 ? 'text-warnc' : 'text-mute'}`}>{days === 0 ? t('本日', 'Today') : t(`${days}日後`, `in ${days}d`)}</span>
               </div>
               {items.map((i, n) => {
                 const local = i.timeET ? etToLocal(i.date, i.timeET) : null;
@@ -80,14 +83,14 @@ export function EconCalendar({ econ, econError, earnings, onSelect }: Props) {
                     className={`flex items-center gap-1.5 rounded px-1 py-0.5 text-xs ${i.key === 'EARN' ? 'cursor-pointer hover:bg-white/5' : ''}`}
                   >
                     <span className={`w-12 shrink-0 rounded px-1 text-center text-[10px] font-semibold ${KEY_COLOR[i.key] ?? KEY_COLOR.PPI}`}>
-                      {i.key === 'EARN' ? '決算' : i.key === 'RETAIL' ? '小売' : i.key === 'NFP' ? '雇用' : i.key}
+                      {i.key === 'EARN' ? t('決算', 'Earn') : i.key === 'RETAIL' ? t('小売', 'Retail') : i.key === 'NFP' ? t('雇用', 'Jobs') : i.key}
                     </span>
                     <span className={`min-w-0 flex-1 truncate ${i.importance === 'high' ? 'font-medium' : ''}`} title={i.detail}>
                       {i.label}
                       {i.importance === 'high' && <span className="ml-1 text-warnc">★</span>}
                     </span>
                     {local && (
-                      <span className="num shrink-0 text-[10px] text-mute" title={`米東部時間 ${i.timeET}`}>
+                      <span className="num shrink-0 text-[10px] text-mute" title={t(`米東部時間 ${i.timeET}`, `${i.timeET} ET`)}>
                         {local.time}
                         {local.dayShift ? '+1' : ''}
                       </span>
@@ -98,9 +101,9 @@ export function EconCalendar({ econ, econError, earnings, onSelect }: Props) {
             </div>
           );
         })}
-        {!groups.length && !econError && <p className="p-2 text-xs text-mute">予定はありません</p>}
+        {!groups.length && !econError && <p className="p-2 text-xs text-mute">{t('予定はありません', 'Nothing scheduled')}</p>}
       </div>
-      <p className="border-t border-line px-3 py-1 text-[10px] text-mute">時刻は閲覧中の現地時間（{localTzLabel()}）。★=市場への影響が大きい指標</p>
+      <p className="border-t border-line px-3 py-1 text-[10px] text-mute">{t(`時刻は閲覧中の現地時間（${localTzLabel()}）。★=市場への影響が大きい指標`, `Times in your local zone (${localTzLabel()}). ★ = high market impact`)}</p>
     </Card>
   );
 }

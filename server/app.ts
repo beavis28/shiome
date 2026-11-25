@@ -1,5 +1,6 @@
 // API のルート定義（Hono）。Node（server/node.ts）と Cloudflare Workers（server/worker.ts）で共通。
 // キーは process.env から読み、ブラウザには渡さない。
+import { langOf, tx, withLang } from './lang.ts';
 import { Hono } from 'hono';
 import type { AppConfig, Valuation } from '../src/types.ts';
 import { chatStream, type ChatMessage } from './chat.ts';
@@ -38,6 +39,9 @@ export type ApiEnv = { Variables: { userEmail: string | null } };
 
 export const api = new Hono<ApiEnv>();
 
+// 画面の言語（X-Lang）でエラーなどのメッセージを返す
+api.use('*', (c, next) => withLang(langOf(c.req.header('x-lang')), next));
+
 api.get('/me', (c) => c.json({ email: c.get('userEmail') ?? null }));
 
 // 端末をまたいだ設定の同期（ログインしているときだけ）
@@ -49,35 +53,35 @@ api.get('/prefs', async (c) => {
 
 api.put('/prefs', async (c) => {
   const email = c.get('userEmail');
-  if (!email || !prefsAvailable()) return c.json({ error: '同期は使えません（ログインしていません）' }, 400);
+  if (!email || !prefsAvailable()) return c.json({ error: tx('同期は使えません（ログインしていません）', 'Sync is unavailable (not signed in)') }, 400);
   const raw = await c.req.text();
-  if (raw.length > 20_000) return c.json({ error: '設定が大きすぎます' }, 413);
+  if (raw.length > 20_000) return c.json({ error: tx('設定が大きすぎます', 'Settings are too large') }, 413);
   let body: unknown;
   try {
     body = JSON.parse(raw);
   } catch {
-    return c.json({ error: 'JSON が不正です' }, 400);
+    return c.json({ error: tx('JSON が不正です', 'Invalid JSON') }, 400);
   }
   const prefs = sanitize(body);
-  if (!prefs) return c.json({ error: '設定の形式が正しくありません' }, 400);
+  if (!prefs) return c.json({ error: tx('設定の形式が正しくありません', 'Invalid settings format') }, 400);
   return c.json({ sync: true, prefs: await savePrefs(email, prefs) });
 });
 
 api.post('/chat', async (c) => {
-  if (!config().anthropic) return c.json({ error: 'ANTHROPIC_API_KEY が未設定です' }, 400);
+  if (!config().anthropic) return c.json({ error: tx('ANTHROPIC_API_KEY が未設定です', 'ANTHROPIC_API_KEY is not set') }, 400);
   const raw = await c.req.text();
-  if (raw.length > 300_000) return c.json({ error: '送信データが大きすぎます' }, 413);
+  if (raw.length > 300_000) return c.json({ error: tx('送信データが大きすぎます', 'Request is too large') }, 413);
   let body: { messages?: ChatMessage[]; dashboard?: unknown; webSearch?: boolean };
   try {
     body = JSON.parse(raw);
   } catch {
-    return c.json({ error: 'JSON が不正です' }, 400);
+    return c.json({ error: tx('JSON が不正です', 'Invalid JSON') }, 400);
   }
   const messages = (body.messages ?? [])
     .filter((m) => (m.role === 'user' || m.role === 'assistant') && typeof m.content === 'string' && m.content.trim())
     .slice(-30)
     .map((m) => ({ role: m.role, content: m.content.slice(0, 8000) }));
-  if (!messages.length || messages[messages.length - 1].role !== 'user') return c.json({ error: '質問がありません' }, 400);
+  if (!messages.length || messages[messages.length - 1].role !== 'user') return c.json({ error: tx('質問がありません', 'No question was sent') }, 400);
   return new Response(chatStream(messages, body.dashboard ?? {}, { webSearch: body.webSearch !== false }), {
     headers: { 'Content-Type': 'application/x-ndjson; charset=utf-8', 'Cache-Control': 'no-store' },
   });
@@ -87,7 +91,7 @@ api.get('/config', (c) => c.json(config()));
 
 api.get('/stock/:symbol', async (c) => {
   const symbol = c.req.param('symbol').toUpperCase();
-  if (!SYMBOL_RE.test(symbol)) return c.json({ error: 'ティッカーの形式が正しくありません' }, 400);
+  if (!SYMBOL_RE.test(symbol)) return c.json({ error: tx('ティッカーの形式が正しくありません', 'Invalid ticker format') }, 400);
   return c.json(config().demo ? demoStock(symbol) : await fetchStock(symbol));
 });
 
@@ -99,11 +103,11 @@ api.get('/quotes', async (c) => {
 
 api.get('/news/:symbol', async (c) => {
   const symbol = c.req.param('symbol').toUpperCase();
-  if (!SYMBOL_RE.test(symbol)) return c.json({ error: 'ティッカーの形式が正しくありません' }, 400);
+  if (!SYMBOL_RE.test(symbol)) return c.json({ error: tx('ティッカーの形式が正しくありません', 'Invalid ticker format') }, 400);
   try {
     return c.json({ news: await yahooNews(symbol) });
   } catch (e) {
-    return c.json({ error: `ニュースを取得できませんでした（${msg(e)}）` }, 502);
+    return c.json({ error: tx(`ニュースを取得できませんでした（${msg(e)}）`, `Could not load news (${msg(e)})`) }, 502);
   }
 });
 
@@ -131,7 +135,7 @@ api.get('/heatmap', async (c) => {
     const r = await yahooHeatmap(symbols);
     return c.json({ ...r, asOf: new Date().toISOString() });
   } catch (e) {
-    return c.json({ error: `ヒートマップのデータを取得できませんでした（${msg(e)}）` }, 502);
+    return c.json({ error: tx(`ヒートマップのデータを取得できませんでした（${msg(e)}）`, `Could not load heatmap data (${msg(e)})`) }, 502);
   }
 });
 
@@ -150,28 +154,28 @@ api.get('/funds/:cik', async (c) => {
   try {
     return c.json(await fundHoldings(c.req.param('cik')));
   } catch (e) {
-    return c.json({ error: `13F を取得できませんでした（${msg(e)}）` }, 502);
+    return c.json({ error: tx(`13F を取得できませんでした（${msg(e)}）`, `Could not load the 13F (${msg(e)})`) }, 502);
   }
 });
 
 api.get('/ownership/:symbol', async (c) => {
   const symbol = c.req.param('symbol').toUpperCase();
-  if (!SYMBOL_RE.test(symbol)) return c.json({ error: 'ティッカーの形式が正しくありません' }, 400);
+  if (!SYMBOL_RE.test(symbol)) return c.json({ error: tx('ティッカーの形式が正しくありません', 'Invalid ticker format') }, 400);
   try {
     return c.json(await ownership(symbol));
   } catch (e) {
-    return c.json({ error: `保有者のデータを取得できませんでした（${msg(e)}）` }, 502);
+    return c.json({ error: tx(`保有者のデータを取得できませんでした（${msg(e)}）`, `Could not load holder data (${msg(e)})`) }, 502);
   }
 });
 
 api.get('/congress', async (c) => {
   const q = c.req.query('symbol')?.toUpperCase();
-  if (q && !SYMBOL_RE.test(q)) return c.json({ error: 'ティッカーの形式が正しくありません' }, 400);
-  if (!config().fmp) return c.json({ error: 'FMP_API_KEY が未設定です' }, 400);
+  if (q && !SYMBOL_RE.test(q)) return c.json({ error: tx('ティッカーの形式が正しくありません', 'Invalid ticker format') }, 400);
+  if (!config().fmp) return c.json({ error: tx('FMP_API_KEY が未設定です', 'FMP_API_KEY is not set') }, 400);
   try {
     return c.json({ trades: await congressTrades(q) });
   } catch (e) {
-    return c.json({ error: `議員の売買を取得できませんでした（${msg(e)}）` }, 502);
+    return c.json({ error: tx(`議員の売買を取得できませんでした（${msg(e)}）`, `Could not load Congress trades (${msg(e)})`) }, 502);
   }
 });
 
@@ -186,7 +190,7 @@ api.get('/search', async (c) => {
   try {
     return c.json(await lookupSymbols(q));
   } catch (e) {
-    return c.json({ error: `候補を探せませんでした（${msg(e)}）` }, 502);
+    return c.json({ error: tx(`候補を探せませんでした（${msg(e)}）`, `Could not search for tickers (${msg(e)})`) }, 502);
   }
 });
 
@@ -207,15 +211,15 @@ api.get('/validate', async (c) => {
 });
 
 api.post('/ocr', async (c) => {
-  if (!config().anthropic) return c.json({ error: 'ANTHROPIC_API_KEY が未設定です' }, 400);
+  if (!config().anthropic) return c.json({ error: tx('ANTHROPIC_API_KEY が未設定です', 'ANTHROPIC_API_KEY is not set') }, 400);
   const body = await c.req.json<{ images?: { data: string; mediaType: string }[] }>().catch(() => ({ images: undefined }));
   const images = body.images ?? [];
-  if (!Array.isArray(images) || !images.length || images.length > 8) return c.json({ error: '画像は 1〜8 枚にしてください' }, 400);
+  if (!Array.isArray(images) || !images.length || images.length > 8) return c.json({ error: tx('画像は 1〜8 枚にしてください', 'Send 1 to 8 images') }, 400);
   try {
     return c.json({ tickers: await readTickersWithClaude(images) });
   } catch (e) {
     console.error(e);
-    return c.json({ error: msg(e) || '読み取りに失敗しました' }, 500);
+    return c.json({ error: msg(e) || tx('読み取りに失敗しました', 'Could not read the images') }, 500);
   }
 });
 

@@ -2,6 +2,7 @@
 // - 有名ファンドの保有: SEC EDGAR の 13F（四半期ごと、期末から最大 45 日遅れ）。CUSIP → ティッカーは OpenFIGI
 // - 役員の売買・大口保有機関: Yahoo Finance（元は SEC の Form 4 / 13F）
 // - 議員の売買: FMP（上院・下院の STOCK Act 報告。プランによっては取れない）
+import { tx } from './lang.ts';
 import type { CongressTrade, FundHoldings, FundPosition, FundSummary, Ownership } from '../src/types.ts';
 import { cached, HOUR } from './cache.ts';
 import { fmp } from './fmp.ts';
@@ -31,10 +32,10 @@ const day = (v: unknown) => iso(v)?.slice(0, 10) ?? null;
 /** SEC は連絡先（名前とメールアドレス）入りの User-Agent を求める。各自が .env / Secret に設定する */
 export async function sec(url: string): Promise<Response> {
   const ua = process.env.SEC_USER_AGENT;
-  if (!ua) throw new Error('SEC_USER_AGENT が未設定です');
+  if (!ua) throw new Error(tx('SEC_USER_AGENT が未設定です', 'SEC_USER_AGENT is not set'));
   const res = await fetch(url, { headers: { 'User-Agent': ua, Accept: 'application/json, application/xml, */*' } });
-  if (res.status === 403) throw new Error('SEC に拒否されました（SEC_USER_AGENT に名前とメールアドレスを入れてください）');
-  if (!res.ok) throw new Error(`SEC エラー (${res.status})`);
+  if (res.status === 403) throw new Error(tx('SEC に拒否されました（SEC_USER_AGENT に名前とメールアドレスを入れてください）', 'SEC refused the request (put your name and email in SEC_USER_AGENT)'));
+  if (!res.ok) throw new Error(tx(`SEC エラー (${res.status})`, `SEC error (${res.status})`));
   return res;
 }
 
@@ -60,7 +61,7 @@ async function infoTable(cik: string, accession: string): Promise<Row[]> {
   const base = `https://www.sec.gov/Archives/edgar/data/${Number(cik)}/${accession.replace(/-/g, '')}`;
   const idx = (await (await sec(`${base}/index.json`)).json()) as { directory: { item: { name: string }[] } };
   const file = idx.directory.item.map((i) => i.name).find((n) => /\.xml$/i.test(n) && !/primary_doc/i.test(n));
-  if (!file) throw new Error('13F の保有一覧が見つかりません');
+  if (!file) throw new Error(tx('13F の保有一覧が見つかりません', '13F holdings table not found'));
   const xml = await (await sec(`${base}/${file}`)).text();
   const tag = (block: string, name: string) => decode(block.match(new RegExp(`<(?:\\w+:)?${name}>([^<]*)<`, 'i'))?.[1].trim() ?? '');
   // 同じ銘柄が運用者ごとに複数行に分かれているので、CUSIP（とプット・コール）ごとに合算する
@@ -164,10 +165,10 @@ const TOP = 100;
 /** 有名ファンドの最新 13F（上位 100 銘柄）と前の期からの変化（3 日キャッシュ） */
 export function fundHoldings(cik: string): Promise<FundHoldings> {
   const f = FUNDS.find((x) => x.cik === cik);
-  if (!f) return Promise.reject(new Error('対象外のファンドです'));
+  if (!f) return Promise.reject(new Error(tx('対象外のファンドです', 'Unknown fund')));
   return cached(`13f:v1:${cik}`, 72 * HOUR, async () => {
     const filings = await latest13F(cik);
-    if (!filings.length) throw new Error('13F の届け出がありません');
+    if (!filings.length) throw new Error(tx('13F の届け出がありません', 'No 13F filings'));
     const [now, prev] = filings;
     const cur = await infoTable(cik, now.accession);
     const old = prev ? await infoTable(cik, prev.accession) : [];

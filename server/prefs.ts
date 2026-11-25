@@ -1,5 +1,6 @@
 // ログインしている人（Cloudflare Access のメールアドレス）ごとの設定を保存する。
 // ウォッチリストなどを端末をまたいで同期するため。Workers では KV、手元（ログインなし）では使わない。
+import { tx } from './lang.ts';
 import type { Prefs } from '../src/types.ts';
 
 export interface PrefsStore {
@@ -52,7 +53,7 @@ export async function loadPrefs(email: string): Promise<Prefs | null> {
 
 /** 新しいほう（updatedAt が大きいほう）を残す。保存した結果を返す */
 export async function savePrefs(email: string, prefs: Prefs): Promise<Prefs> {
-  if (!store) throw new Error('同期の保存先がありません');
+  if (!store) throw new Error(tx('同期の保存先がありません', 'No storage for sync'));
   const cur = await loadPrefs(email);
   if (cur && cur.updatedAt > prefs.updatedAt) return cur;
   await store.put(await keyFor(email), JSON.stringify(prefs));

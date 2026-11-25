@@ -5,6 +5,7 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { CSS2DObject, CSS2DRenderer } from 'three/examples/jsm/renderers/CSS2DRenderer.js';
 import type { ChartPoint, ChartSpec } from '../../types';
 import { fmtNum, PALETTE } from './palette';
+import { useT } from '../../lib/i18n';
 
 const label = (text: string, cls: string) => {
   const el = document.createElement('div');
@@ -16,6 +17,7 @@ const label = (text: string, cls: string) => {
 export default function Scatter3D({ spec }: { spec: ChartSpec }) {
   const box = useRef<HTMLDivElement>(null);
   const [hover, setHover] = useState<ChartPoint | null>(null);
+  const { t } = useT();
 
   useEffect(() => {
     const el = box.current;
@@ -183,11 +185,11 @@ export default function Scatter3D({ spec }: { spec: ChartSpec }) {
       )}
       <div ref={box} className="relative h-[300px] w-full overflow-hidden rounded-md bg-[radial-gradient(ellipse_at_center,#16203a,#0b0f17)]" />
       <div className="mt-1 flex items-center justify-between text-[10px] text-mute">
-        <span>ドラッグで回転 · ホイールで拡大</span>
+        <span>{t('ドラッグで回転 · ホイールで拡大', 'Drag to rotate · scroll to zoom')}</span>
         {hover && (
           <span className="num text-ink">
             {hover.label}: {spec.xTitle ?? 'x'} {fmtNum(hover.x)} / {spec.yTitle ?? 'y'} {fmtNum(hover.y)} / {spec.zTitle ?? 'z'} {fmtNum(hover.z)}
-            {hover.r !== undefined && ` / 大きさ ${fmtNum(hover.r)}`}
+            {hover.r !== undefined && ` / ${t('大きさ', 'Size')} ${fmtNum(hover.r)}`}
           </span>
         )}
       </div>

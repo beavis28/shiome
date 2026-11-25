@@ -5,6 +5,7 @@ import { searchProviders, webSearch } from './search.ts';
 import type { ChartSpec } from '../src/types.ts';
 import * as fmp from './fmp.ts';
 import * as yahoo from './yahoo.ts';
+import { currentLang, tx } from './lang.ts';
 
 export interface ChatMessage {
   role: 'user' | 'assistant';
@@ -15,7 +16,7 @@ const SYSTEM = `あなたは米国株ダッシュボード「Shiome（潮目）�
 
 ## 役割
 - ユーザーが見ている画面のデータ（<dashboard> タグ内の JSON）をもとに、株価・アナリスト目標価格・テクニカル指標・決算日・経済指標・ニュースの意味をわかりやすく説明し、考えるための材料を整理します。
-- 回答は日本語で、簡潔に。読みやすさのため、1 つの段落は 2〜3 文までにし、段落や箇条書きのまとまりの間には空行を入れます。話題が複数あるときは短い見出し（## 見出し）で区切り、箇条書きは「・」を使います。
+- 回答は簡潔に（言語は最後の「回答の言語」に従う）。読みやすさのため、1 つの段落は 2〜3 文までにし、段落や箇条書きのまとまりの間には空行を入れます。話題が複数あるときは短い見出し（## 見出し）で区切り、箇条書きは「・」を使います。
 
 ## データの扱い
 - 数値は <dashboard> にあるものだけを使い、ない数値を作らないでください。データにないことは「画面のデータにはありません」と伝えます。
@@ -66,8 +67,8 @@ Never mix two units on one axis. Only plot numbers from the dashboard data, sear
     type: 'object',
     properties: {
       kind: { type: 'string', enum: ['bar', 'hbar', 'line', 'area', 'doughnut', 'scatter', 'bubble', 'radar', 'scatter3d'] },
-      title: { type: 'string', description: 'Chart title in Japanese' },
-      unit: { type: 'string', description: 'Unit of the values, e.g. "%", "倍", "ドル", "億ドル"' },
+      title: { type: 'string', description: "Chart title in the user's language" },
+      unit: { type: 'string', description: 'Unit of the values in the user\'s language, e.g. "%", "倍"/"x", "ドル"/"USD", "億ドル"/"USD bn"' },
       labels: { type: 'array', items: { type: 'string' }, description: 'Categories or dates (bar, hbar, line, area, doughnut, radar)' },
       series: {
         type: 'array',
@@ -99,7 +100,7 @@ Never mix two units on one axis. Only plot numbers from the dashboard data, sear
       xTitle: { type: 'string' },
       yTitle: { type: 'string' },
       zTitle: { type: 'string' },
-      source: { type: 'string', description: 'Where the numbers come from, e.g. "画面のデータ (Yahoo Finance)" or "CNBC 11/3"' },
+      source: { type: 'string', description: 'Where the numbers come from, e.g. "画面のデータ (Yahoo Finance)" / "Dashboard data (Yahoo Finance)" or "CNBC 11/3"' },
     },
     required: ['kind', 'title', 'unit'],
     additionalProperties: false,
@@ -221,11 +222,11 @@ async function priceComparison(raw: unknown): Promise<{ spec: ChartSpec; summary
   });
   const spec: ChartSpec = {
     kind: 'line',
-    title: `株価の比較（${range}${rebase ? '・開始日=100' : ''}）`,
-    unit: rebase ? '（開始日=100）' : 'ドル',
+    title: tx(`株価の比較（${range}${rebase ? '・開始日=100' : ''}）`, `Price comparison (${range}${rebase ? ', start = 100' : ''})`),
+    unit: rebase ? tx('（開始日=100）', '(start = 100)') : tx('ドル', 'USD'),
     labels: idx.map((k) => dates[k]),
     series: series.map(({ name, values }) => ({ name, values })),
-    source: process.env.FMP_API_KEY ? 'FMP / Yahoo Finance の日足終値' : 'Yahoo Finance の日足終値',
+    source: process.env.FMP_API_KEY ? tx('FMP / Yahoo Finance の日足終値', 'FMP / Yahoo Finance daily closes') : tx('Yahoo Finance の日足終値', 'Yahoo Finance daily closes'),
   };
   const missing = symbols.filter((s) => !ok.find((x) => x.s === s));
   return { spec, summary: { range, from: dates[0], to: dates[dates.length - 1], stocks: series.map(({ name, start, end, changePct }) => ({ symbol: name, start, end, changePct })), missing } };
@@ -263,6 +264,11 @@ export function chatStream(history: ChatMessage[], dashboard: unknown, opts: { w
   const enc = new TextEncoder();
   const context = `<dashboard>\n${JSON.stringify(dashboard)}\n</dashboard>`;
   const search = opts.webSearch && searchProviders().length > 0;
+  // 画面の言語で答える（図のタイトル・単位・出典も）
+  const LANG_RULE =
+    currentLang() === 'en'
+      ? `\n\n## 回答の言語\nThe user's screen is in English. Write the whole answer in English, including chart titles, units, sources and table headers. Use clear, plain English.`
+      : `\n\n## 回答の言語\n日本語で答えます。図のタイトル・単位・出典・表の見出しも日本語にします。`;
 
   return new ReadableStream({
     async start(controller) {
@@ -279,8 +285,8 @@ export function chatStream(history: ChatMessage[], dashboard: unknown, opts: { w
             fallbacks: 'default',
             output_config: { effort: 'medium' },
             system: [
-              { type: 'text', text: SYSTEM + VISUAL_RULES + (search ? SEARCH_RULES : '') },
-              { type: 'text', text: `現在時刻: ${new Date().toISOString()}\n${context}` },
+              { type: 'text', text: SYSTEM + VISUAL_RULES + (search ? SEARCH_RULES : '') + LANG_RULE },
+              { type: 'text', text: `Current time: ${new Date().toISOString()}\n${context}` },
             ],
             // 検索の上限に達したら、ツールなしで答えをまとめさせる
             ...(round < 5 ? { tools: [...(search && round < 4 ? [SEARCH_TOOL] : []), CHART_TOOL, PRICE_TOOL] } : {}),
@@ -291,11 +297,11 @@ export function chatStream(history: ChatMessage[], dashboard: unknown, opts: { w
           }
           const final = await stream.finalMessage();
           if (final.stop_reason === 'refusal') {
-            send({ t: 'text', v: '\n\n（この質問にはお答えできませんでした）' });
+            send({ t: 'text', v: tx('\n\n（この質問にはお答えできませんでした）', '\n\n(I could not answer this question.)') });
             break;
           }
           if (final.stop_reason === 'max_tokens') {
-            send({ t: 'text', v: '\n\n（回答が長すぎたため途中で終わりました）' });
+            send({ t: 'text', v: tx('\n\n（回答が長すぎたため途中で終わりました）', '\n\n(The answer was too long and was cut off.)') });
             break;
           }
           const calls = final.content.filter((b): b is Anthropic.Beta.BetaToolUseBlock => b.type === 'tool_use');
@@ -356,11 +362,11 @@ export function chatStream(history: ChatMessage[], dashboard: unknown, opts: { w
       } catch (e) {
         const msg =
           e instanceof Anthropic.AuthenticationError
-            ? 'ANTHROPIC_API_KEY が正しくありません'
+            ? tx('ANTHROPIC_API_KEY が正しくありません', 'ANTHROPIC_API_KEY is invalid')
             : e instanceof Anthropic.RateLimitError
-              ? '呼び出しが多すぎます。少し待ってから試してください'
+              ? tx('呼び出しが多すぎます。少し待ってから試してください', 'Too many requests. Please wait a moment and try again.')
               : e instanceof Anthropic.APIError
-                ? `Claude API エラー (${e.status ?? ''})`
+                ? tx(`Claude API エラー (${e.status ?? ''})`, `Claude API error (${e.status ?? ''})`)
                 : e instanceof Error
                   ? e.message
                   : String(e);

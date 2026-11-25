@@ -12,28 +12,29 @@ import { FlowsView } from './components/FlowsView';
 import { buildDashboardContext } from './lib/context';
 import { WatchlistTable } from './components/WatchlistTable';
 import { api } from './lib/api';
+import { setLang, useT, type Lang } from './lib/i18n';
 import { derive, type Derived, type StockState } from './lib/derive';
 import { DEFAULT_WATCHLIST, loadWatchlist, saveWatchlist } from './lib/watchlist';
 import type { AppConfig, EconPayload, MacroPayload, Prefs, Valuation } from './types';
 
 type MobileTab = 'list' | 'detail' | 'compare' | 'heatmap' | 'flows' | 'macro' | 'news';
-const MOBILE_TABS: [MobileTab, string, string][] = [
-  ['list', '📋', '銘柄'],
-  ['detail', '📈', '詳細'],
-  ['compare', '📊', '比較'],
-  ['heatmap', '🟩', 'ヒート'],
-  ['flows', '🐋', '大口'],
-  ['macro', '🌐', '市場'],
-  ['news', '📰', 'ニュース'],
+const MOBILE_TABS: [MobileTab, string, string, string][] = [
+  ['list', '📋', '銘柄', 'Stocks'],
+  ['detail', '📈', '詳細', 'Detail'],
+  ['compare', '📊', '比較', 'Compare'],
+  ['heatmap', '🟩', 'ヒート', 'Heatmap'],
+  ['flows', '🐋', '大口', 'Big $'],
+  ['macro', '🌐', '市場', 'Markets'],
+  ['news', '📰', 'ニュース', 'News'],
 ];
 
 const MARKET_LABEL: Record<string, string> = {
-  REGULAR: '米国市場 取引中',
-  PRE: 'プレマーケット',
-  POST: 'アフターマーケット',
-  POSTPOST: '閉場',
-  PREPRE: '閉場',
-  CLOSED: '閉場',
+  REGULAR: '米国市場 取引中|US market open',
+  PRE: 'プレマーケット|Pre-market',
+  POST: 'アフターマーケット|After hours',
+  POSTPOST: '閉場|Closed',
+  PREPRE: '閉場|Closed',
+  CLOSED: '閉場|Closed',
 };
 
 function readLS<T>(key: string, fallback: T): T {
@@ -54,10 +55,32 @@ function writeLS(key: string, value: unknown) {
 
 const SYMBOL_RE = /^[A-Z]{1,5}([.-][A-Z]{1,2})?$/;
 
+/** 表示言語の切り替え（日本語 / English） */
+function LangToggle() {
+  const { lang } = useT();
+  const opt = (l: Lang, label: string) => (
+    <button
+      onClick={() => setLang(l)}
+      aria-pressed={lang === l}
+      className={`px-1.5 py-0.5 ${lang === l ? 'bg-accent/15 text-accent' : 'text-mute hover:text-ink'}`}
+    >
+      {label}
+    </button>
+  );
+  return (
+    <span className="flex shrink-0 overflow-hidden rounded-md border border-line text-[11px]" title="Language / 言語">
+      {opt('ja', 'JA')}
+      <span className="w-px bg-line" />
+      {opt('en', 'EN')}
+    </span>
+  );
+}
+
 type SyncState = 'off' | 'loading' | 'synced' | 'saving' | 'error';
 
 /** 接続しているデータ元・同期・ログインを 1 つのボタンにまとめ、クリックで一覧を開く */
 function StatusMenu({ config, sync, me, align = 'right' }: { config: AppConfig | null; sync: SyncState; me: string | null; align?: 'left' | 'right' }) {
+  const { t } = useT();
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -74,16 +97,22 @@ function StatusMenu({ config, sync, me, align = 'right' }: { config: AppConfig |
   }, [open]);
 
   const rows: { label: string; on: boolean | undefined; use: string; off: string }[] = [
-    { label: 'Yahoo Finance', on: config ? !config.demo : undefined, use: '株価・チャート・ニュース・保有者', off: 'デモモード' },
-    { label: 'FMP', on: config?.fmp, use: '日足・目標価格・決算日・議員の売買', off: '未設定（Yahoo で代替）' },
-    { label: 'FRED', on: config?.fred, use: '経済指標と発表日', off: '未設定（FOMC だけ表示）' },
-    { label: 'SEC', on: config?.sec, use: '有名投資家の 13F', off: '未設定（SEC_USER_AGENT）' },
-    { label: 'Claude', on: config?.anthropic, use: 'AI に相談・画像の読み取り', off: '未設定（ブラウザ内 OCR）' },
-    { label: 'Exa', on: config?.exa, use: '相談のウェブ検索', off: '未設定' },
-    { label: 'Tavily', on: config?.tavily, use: '相談のウェブ検索', off: '未設定' },
+    { label: 'Yahoo Finance', on: config ? !config.demo : undefined, use: t('株価・チャート・ニュース・保有者', 'Prices, charts, news, holders'), off: t('デモモード', 'Demo mode') },
+    { label: 'FMP', on: config?.fmp, use: t('日足・目標価格・決算日・議員の売買', 'Daily prices, targets, earnings, Congress'), off: t('未設定（Yahoo で代替）', 'Not set (Yahoo used instead)') },
+    { label: 'FRED', on: config?.fred, use: t('経済指標と発表日', 'Economic data and release dates'), off: t('未設定（FOMC だけ表示）', 'Not set (FOMC only)') },
+    { label: 'SEC', on: config?.sec, use: t('有名投資家の 13F', "Famous investors' 13F"), off: t('未設定（SEC_USER_AGENT）', 'Not set (SEC_USER_AGENT)') },
+    { label: 'Claude', on: config?.anthropic, use: t('AI に相談・画像の読み取り', 'Ask AI, reading images'), off: t('未設定（ブラウザ内 OCR）', 'Not set (in-browser OCR)') },
+    { label: 'Exa', on: config?.exa, use: t('相談のウェブ検索', 'Web search in chat'), off: t('未設定', 'Not set') },
+    { label: 'Tavily', on: config?.tavily, use: t('相談のウェブ検索', 'Web search in chat'), off: t('未設定', 'Not set') },
   ];
   const offCount = rows.filter((r) => r.on === false).length;
-  const syncLabel = { off: '使えません（ログインしていません）', loading: '確認中…', synced: '同期済み', saving: '保存中…', error: '同期できません' }[sync];
+  const syncLabel = {
+    off: t('使えません（ログインしていません）', 'Unavailable (not signed in)'),
+    loading: t('確認中…', 'Checking…'),
+    synced: t('同期済み', 'Synced'),
+    saving: t('保存中…', 'Saving…'),
+    error: t('同期できません', 'Sync failed'),
+  }[sync];
   const dot = sync === 'error' ? 'bg-downc' : !config ? 'bg-white/30' : offCount ? 'bg-warnc' : 'bg-upc';
 
   return (
@@ -93,16 +122,16 @@ function StatusMenu({ config, sync, me, align = 'right' }: { config: AppConfig |
         aria-expanded={open}
         aria-haspopup="true"
         className="flex items-center gap-1.5 whitespace-nowrap rounded-md border border-line px-2 py-1 text-[11px] text-mute hover:bg-white/5 hover:text-ink"
-        title="接続しているデータ元と同期の状態"
+        title={t('接続しているデータ元と同期の状態', 'Data sources and sync status')}
       >
         <i className={`inline-block h-2 w-2 rounded-full ${dot}`} />
-        接続状態
+        {t('接続状態', 'Status')}
         {sync === 'saving' || sync === 'loading' ? <span className="text-[10px]">☁…</span> : sync === 'synced' ? <span className="text-[10px] text-sky-300">☁</span> : null}
         <span className="text-[9px]">▾</span>
       </button>
       {open && (
         <div className={`mt-1 rounded-lg border border-line bg-panel p-1 text-xs ${align === 'right' ? 'absolute right-0 top-full z-50 w-[300px] shadow-2xl' : 'w-full max-w-[360px]'}`}>
-          <p className="px-2.5 pb-1 pt-1.5 text-[10px] font-semibold text-mute">データ元</p>
+          <p className="px-2.5 pb-1 pt-1.5 text-[10px] font-semibold text-mute">{t('データ元', 'Data sources')}</p>
           <ul>
             {rows.map((r) => (
               <li key={r.label} className="flex items-start gap-2 rounded px-2.5 py-1">
@@ -116,10 +145,10 @@ function StatusMenu({ config, sync, me, align = 'right' }: { config: AppConfig |
           </ul>
           <div className="mt-1 border-t border-line px-2.5 py-1.5">
             <div className="flex items-center gap-2">
-              <span className={sync === 'error' ? 'text-downc' : sync === 'synced' ? 'text-sky-300' : 'text-mute'}>☁ 端末間の同期</span>
+              <span className={sync === 'error' ? 'text-downc' : sync === 'synced' ? 'text-sky-300' : 'text-mute'}>☁ {t('端末間の同期', 'Sync across devices')}</span>
               <span className="ml-auto text-[10px] text-mute">{syncLabel}</span>
             </div>
-            <p className="text-[10px] text-mute">ウォッチリストと比較の設定を、ログインしたメールアドレスごとに保存します。</p>
+            <p className="text-[10px] text-mute">{t('ウォッチリストと比較の設定を、ログインしたメールアドレスごとに保存します。', 'Your watchlist and compare settings are saved per signed-in email.')}</p>
           </div>
           {me && (
             <div className="flex items-center gap-2 border-t border-line px-2.5 py-1.5">
@@ -127,7 +156,7 @@ function StatusMenu({ config, sync, me, align = 'right' }: { config: AppConfig |
                 {me}
               </span>
               <a href="/cdn-cgi/access/logout" className="ml-auto shrink-0 rounded border border-line px-2 py-0.5 text-[11px] hover:bg-white/5 hover:text-ink">
-                ログアウト
+                {t('ログアウト', 'Sign out')}
               </a>
             </div>
           )}
@@ -138,6 +167,7 @@ function StatusMenu({ config, sync, me, align = 'right' }: { config: AppConfig |
 }
 
 export default function App() {
+  const { t, lang } = useT();
   const [symbols, setSymbols] = useState<string[]>(loadWatchlist);
   const [selected, setSelected] = useState<string | null>(() => loadWatchlist()[0] ?? null);
   const [states, setStates] = useState<Record<string, StockState>>({});
@@ -404,7 +434,9 @@ export default function App() {
     const out: Record<string, Derived> = {};
     for (const s of symbols) out[s] = derive(states[s]?.data);
     return out;
-  }, [symbols, states]);
+    // テクニカルのバッジの文言は言語で変わるので、切り替えたら作り直す
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [symbols, states, lang]);
 
   const add = useCallback((list: string[]) => {
     const clean = list.map((s) => s.trim().toUpperCase()).filter((s) => SYMBOL_RE.test(s));
@@ -426,15 +458,15 @@ export default function App() {
 
   return (
     <div className="flex h-[100dvh] flex-col md:h-full md:min-h-[720px]">
-      <header className="flex items-center gap-2 border-b border-line bg-panel/60 px-2 py-2 md:gap-3 md:px-4">
-        <h1 className="text-sm font-bold tracking-wide">
+      <header className="flex items-center gap-1.5 border-b border-line bg-panel/60 px-2 py-2 md:gap-3 md:px-4">
+        <h1 className="shrink-0 text-sm font-bold tracking-wide">
           <span className="flex items-baseline gap-1.5">
             <img src="/favicon.svg" alt="" className="h-5 w-5 self-center" />
             Shiome
           </span>
         </h1>
         <button onClick={() => setImportOpen(true)} className="shrink-0 whitespace-nowrap rounded-md bg-accent px-3 py-1 text-xs font-semibold text-bg hover:brightness-110">
-          📷<span className="max-md:hidden"> 写真から取り込み</span>
+          📷<span className="max-md:hidden"> {t('写真から取り込み', 'Import photo')}</span>
         </button>
         <button
           onClick={() => {
@@ -444,12 +476,12 @@ export default function App() {
           }}
           className="shrink-0 whitespace-nowrap rounded-md border border-line px-3 py-1 text-xs hover:bg-white/5"
         >
-          ↻<span className="max-md:hidden"> 更新</span>
+          ↻<span className="max-md:hidden"> {t('更新', 'Refresh')}</span>
         </button>
         <button
           onClick={() => setChatOpen((o) => !o)}
           aria-pressed={chatOpen}
-          title="表示中のデータやウェブ検索をもとに、AI に相場について質問できます"
+          title={t('表示中のデータやウェブ検索をもとに、AI に相場について質問できます', 'Ask AI about the markets, using the data on screen and web search')}
           className={`relative flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md px-3.5 py-1 text-xs font-semibold shadow-[0_0_0_1px_rgba(255,255,255,.08)] transition ${
             chatOpen
               ? 'bg-white text-bg'
@@ -457,41 +489,41 @@ export default function App() {
           }`}
         >
           {!chatOpen && <span className="absolute -right-1 -top-1 h-2 w-2 animate-ping rounded-full bg-fuchsia-300 [animation-iteration-count:3]" />}
-          💬 AI<span className="max-md:hidden"> に相談</span>
+          💬 {t('AI', 'Ask')}<span className="max-md:hidden">{t(' に相談', ' AI')}</span>
         </button>
         <button
           onClick={() => setTvOpen((o) => !o)}
-          title="経済ニュースのライブ配信（Bloomberg など）"
+          title={t('経済ニュースのライブ配信（Bloomberg など）', 'Live business news (Bloomberg and more)')}
           className={`shrink-0 whitespace-nowrap rounded-md border px-3 py-1 text-xs ${tvOpen ? 'border-accent bg-accent/15 text-accent' : 'border-line hover:bg-white/5'}`}
         >
-          📺 TV
+          📺<span className="max-md:hidden"> TV</span>
         </button>
         {anyDemo && (
           <span className="rounded bg-warnc/15 px-2 py-0.5 text-[11px] text-warnc">
-            デモデータ表示中（DEMO=1・実在の株価ではありません）
+            {t('デモデータ表示中（DEMO=1・実在の株価ではありません）', 'Demo data (DEMO=1, not real prices)')}
           </span>
         )}
         {!anyDemo && (
           <span className="flex min-w-0 items-center gap-2 overflow-hidden whitespace-nowrap text-[11px] text-mute">
             <span className={`flex items-center gap-1 ${marketState === 'REGULAR' ? 'text-upc' : marketActive ? 'text-warnc' : ''}`}>
               <i className={`inline-block h-1.5 w-1.5 rounded-full ${marketState === 'REGULAR' ? 'animate-pulse bg-upc' : marketActive ? 'bg-warnc' : 'bg-mute'}`} />
-              <span className="max-md:hidden">{MARKET_LABEL[marketState ?? ''] ?? '—'}</span>
+              <span className="max-md:hidden">{MARKET_LABEL[marketState ?? '']?.split('|')[lang === 'en' ? 1 : 0] ?? '—'}</span>
             </span>
             {liveAt && (
               <span className="num truncate max-md:hidden">
-                最終更新 {new Date(liveAt).toLocaleTimeString('ja-JP')} · 自動更新 {marketActive ? '20秒' : '5分'}
+                {t('最終更新', 'Updated')} {new Date(liveAt).toLocaleTimeString(lang === 'en' ? 'en-US' : 'ja-JP')} · {t('自動更新', 'auto')} {marketActive ? t('20秒', '20s') : t('5分', '5m')}
               </span>
             )}
           </span>
         )}
-        <span className="flex shrink-0 overflow-hidden rounded-md border border-line text-xs max-md:hidden" role="tablist" aria-label="表示の切り替え">
+        <span className="flex shrink-0 overflow-hidden rounded-md border border-line text-xs max-md:hidden" role="tablist" aria-label={t('表示の切り替え', 'Views')}>
           {(
             [
-              ['detail', '📈 詳細'],
-              ['compare', '📊 比較'],
-              ['heatmap', '🟩 ヒートマップ'],
-              ['flows', '🐋 大口の売買'],
-              ['macro', '🌐 金利・商品・為替'],
+              ['detail', t('📈 詳細', '📈 Detail')],
+              ['compare', t('📊 比較', '📊 Compare')],
+              ['heatmap', t('🟩 ヒートマップ', '🟩 Heatmap')],
+              ['flows', t('🐋 大口の売買', '🐋 Big money')],
+              ['macro', t('🌐 金利・商品・為替', '🌐 Rates & FX')],
             ] as const
           ).map(([k, label]) => (
             <button
@@ -505,8 +537,11 @@ export default function App() {
             </button>
           ))}
         </span>
-        <div className="ml-auto max-md:hidden">
-          <StatusMenu config={config} sync={sync} me={me} />
+        <div className="ml-auto flex items-center gap-2">
+          <LangToggle />
+          <span className="max-md:hidden">
+            <StatusMenu config={config} sync={sync} me={me} />
+          </span>
         </div>
       </header>
 
@@ -514,7 +549,7 @@ export default function App() {
 
       {configError && (
         <div className="border-b border-downc/40 bg-downc/10 px-4 py-2 text-xs text-downc">
-          サーバーに接続できません: {configError}
+          {t('サーバーに接続できません', 'Cannot reach the server')}: {configError}
         </div>
       )}
       {isMobile ? (
@@ -538,7 +573,7 @@ export default function App() {
                   <StatusMenu config={config} sync={sync} me={me} align="left" />
                 </div>
                 <p className="px-1 text-[10px] leading-relaxed text-mute">
-                  ⚠ 本アプリは情報提供のみを目的としたもので、投資助言や売買の推奨ではありません。データは遅延・誤りを含む場合があります。投資判断はご自身の責任で行ってください。
+                  {t('⚠ 本アプリは情報提供のみを目的としたもので、投資助言や売買の推奨ではありません。データは遅延・誤りを含む場合があります。投資判断はご自身の責任で行ってください。', '⚠ For information only. This app is not investment advice or a recommendation to buy or sell. Data may be delayed or contain errors. Investment decisions are your own responsibility.')}
                 </p>
               </div>
             )}
@@ -551,12 +586,12 @@ export default function App() {
                   </div>
                 </div>
               ) : (
-                <p className="p-6 text-center text-sm text-mute">「銘柄」タブで銘柄を選んでください</p>
+                <p className="p-6 text-center text-sm text-mute">{t('「銘柄」タブで銘柄を選んでください', 'Pick a stock in the Stocks tab')}</p>
               ))}
             {mTab === 'compare' && (
               <div className="flex flex-col gap-2">
                 <div className="flex flex-wrap gap-1.5 rounded-lg border border-line bg-panel p-2">
-                  <span className="w-full text-[11px] text-mute">比べる銘柄（タップで切り替え）</span>
+                  <span className="w-full text-[11px] text-mute">{t('比べる銘柄（タップで切り替え）', 'Stocks to compare (tap to toggle)')}</span>
                   {symbols.map((sym) => {
                     const on = compareSymbols.includes(sym);
                     return (
@@ -623,8 +658,8 @@ export default function App() {
               </div>
             )}
           </main>
-          <nav className="fixed inset-x-0 bottom-0 z-30 grid grid-cols-7 border-t border-line bg-panel/95 pb-[env(safe-area-inset-bottom)] backdrop-blur" aria-label="画面の切り替え">
-            {MOBILE_TABS.map(([k, icon, label]) => (
+          <nav className="fixed inset-x-0 bottom-0 z-30 grid grid-cols-7 border-t border-line bg-panel/95 pb-[env(safe-area-inset-bottom)] backdrop-blur" aria-label={t('画面の切り替え', 'Screens')}>
+            {MOBILE_TABS.map(([k, icon, ja, en]) => (
               <button
                 key={k}
                 onClick={() => setMTab(k)}
@@ -632,7 +667,7 @@ export default function App() {
                 className={`flex flex-col items-center gap-0.5 py-1.5 text-[10px] ${mTab === k ? 'text-accent' : 'text-mute'}`}
               >
                 <span className="text-lg leading-none">{icon}</span>
-                {label}
+                {lang === 'en' ? en : ja}
               </button>
             ))}
           </nav>
@@ -697,7 +732,7 @@ export default function App() {
             ) : selected ? (
               <DetailPanel symbol={selected} state={states[selected]} d={derived[selected]} />
             ) : (
-              <div className="flex h-full items-center justify-center rounded-lg border border-line bg-panel text-sm text-mute">銘柄を選択してください</div>
+              <div className="flex h-full items-center justify-center rounded-lg border border-line bg-panel text-sm text-mute">{t('銘柄を選択してください', 'Select a stock')}</div>
             )}
           </div>
           <div className="grid min-h-0 min-w-0 grid-rows-[minmax(0,1fr)_minmax(0,1fr)] gap-2">
@@ -708,8 +743,8 @@ export default function App() {
       )}
 
       <footer className="hidden border-t border-line px-4 py-1 text-[10px] text-mute md:block">
-        ⚠ 本アプリは情報提供のみを目的としたもので、投資助言や売買の推奨ではありません。データは遅延・誤りを含む場合があります。投資判断はご自身の責任で行ってください。
-        データ: Yahoo Finance（非公式・個人利用）/ Financial Modeling Prep / FRED / FRB（FOMC 日程）
+        {t('⚠ 本アプリは情報提供のみを目的としたもので、投資助言や売買の推奨ではありません。データは遅延・誤りを含む場合があります。投資判断はご自身の責任で行ってください。', '⚠ For information only. This app is not investment advice or a recommendation to buy or sell. Data may be delayed or contain errors. Investment decisions are your own responsibility.')}
+        {t('データ: Yahoo Finance（非公式・個人利用）/ Financial Modeling Prep / FRED / FRB（FOMC 日程）', 'Data: Yahoo Finance (unofficial, personal use) / Financial Modeling Prep / FRED / SEC / Federal Reserve (FOMC dates)')}
       </footer>
 
       {tvOpen && <TvPlayer onClose={() => setTvOpen(false)} />}

@@ -1,6 +1,7 @@
 // 銘柄データの組み立て。取得元の優先順位:
 //   現在値            : Yahoo（ほぼリアルタイム）→ FMP
 //   日足・目標・決算日 : FMP（キーがある場合）→ Yahoo
+import { tx } from './lang.ts';
 import type { DataSource, Quote, Section, StockPayload } from '../src/types.ts';
 import * as fmp from './fmp.ts';
 import * as yahoo from './yahoo.ts';
@@ -20,7 +21,7 @@ async function firstOf<T>(sources: Source<T>[]): Promise<Section<T>> {
       errors.push(`${source}: ${msg(e)}`);
     }
   }
-  return { data: null, error: errors.join(' / ') || '取得元がありません' };
+  return { data: null, error: errors.join(' / ') || tx('取得元がありません', 'No data source available') };
 }
 
 const fmpQuote = async (s: string): Promise<Quote> => ({ ...(await fmp.getQuote(s)), feed: 'FMP' });

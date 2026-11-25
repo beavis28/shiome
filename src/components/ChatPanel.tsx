@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type FormEvent, type PointerEvent as RPointerEvent } from 'react';
 import { api } from '../lib/api';
+import { useT } from '../lib/i18n';
 import type { AppConfig, ChartSpec } from '../types';
 import { ChatChart } from './ChatChart';
 
@@ -93,13 +94,13 @@ function Rich({ text }: { text: string }) {
 }
 
 const SUGGESTIONS = [
-  '表示中の銘柄の最近のニュースと決算の内容は？',
-  'ウォッチリストの銘柄の6か月の値動きを図で比べて',
-  'この画面の要点をまとめて',
-  'テクニカル指標の状態を説明して',
-  '次の決算と経済指標で注目される点は？',
-  'ニュースの要点と株価との関係は？',
-  'ウォッチリストの中で目立つ動きは？',
+  { ja: '表示中の銘柄の最近のニュースと決算の内容は？', en: "What's the latest news and earnings for this stock?" },
+  { ja: 'ウォッチリストの銘柄の6か月の値動きを図で比べて', en: 'Chart and compare 6-month moves of my watchlist' },
+  { ja: 'この画面の要点をまとめて', en: 'Summarize the key points on this screen' },
+  { ja: 'テクニカル指標の状態を説明して', en: 'Explain the technical indicators' },
+  { ja: '次の決算と経済指標で注目される点は？', en: 'What to watch in upcoming earnings and economic data?' },
+  { ja: 'ニュースの要点と株価との関係は？', en: 'How does the news relate to the price?' },
+  { ja: 'ウォッチリストの中で目立つ動きは？', en: 'Any notable moves in my watchlist?' },
 ];
 
 interface Props {
@@ -112,6 +113,7 @@ interface Props {
 }
 
 export function ChatPanel({ open, onClose, config, selected, getContext }: Props) {
+  const { t, lang } = useT();
   const [msgs, setMsgs] = useState<Msg[]>([]);
   const [input, setInput] = useState('');
   const [busy, setBusy] = useState(false);
@@ -163,7 +165,7 @@ export function ChatPanel({ open, onClose, config, selected, getContext }: Props
     abortRef.current = ac;
     try {
       const res = await api.chat(
-        history.map(({ role, content, charts }) => ({ role, content: content.replace(MARK_RE, (_, n) => `[図: ${charts?.[Number(n)]?.title ?? ''}]`) })),
+        history.map(({ role, content, charts }) => ({ role, content: content.replace(MARK_RE, (_, n) => `[${t('図', 'Chart')}: ${charts?.[Number(n)]?.title ?? ''}]`) })),
         await getContext(),
         canSearch && webSearch,
         ac.signal,
@@ -214,15 +216,19 @@ export function ChatPanel({ open, onClose, config, selected, getContext }: Props
     <aside className="fixed bottom-0 right-0 top-0 z-40 flex max-w-[100vw] flex-col border-l border-line bg-panel shadow-2xl max-md:!w-screen" style={{ width }}>
       <div
         onPointerDown={startDrag}
-        title="ドラッグで幅を変更"
+        title={t('ドラッグで幅を変更', 'Drag to resize')}
         className="absolute -left-1 bottom-0 top-0 z-10 w-2 cursor-col-resize hover:bg-accent/30 max-md:hidden"
       />
       <header className="flex items-center gap-2 border-b border-line px-3 py-2">
-        <h2 className="whitespace-nowrap text-sm font-semibold">相場の相談</h2>
-        <span className="truncate text-[11px] text-mute max-md:hidden">{selected ? `${selected} を表示中` : ''} · Claude</span>
+        <h2 className="whitespace-nowrap text-sm font-semibold">{t('相場の相談', 'Ask AI')}</h2>
+        <span className="truncate text-[11px] text-mute max-md:hidden">{selected ? t(`${selected} を表示中`, `Viewing ${selected}`) : ''} · Claude</span>
         <label
           className={`ml-2 flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full border px-2 py-0.5 text-[11px] ${canSearch && webSearch ? 'border-accent text-accent' : 'border-line text-mute'}`}
-          title={canSearch ? `必要なときにウェブを検索して答えます（${engines.join(' + ')}）` : '検索の API キー（EXA_API_KEY / TAVILY_API_KEY）が未設定のため使えません'}
+          title={
+            canSearch
+              ? t(`必要なときにウェブを検索して答えます（${engines.join(' + ')}）`, `Searches the web when needed (${engines.join(' + ')})`)
+              : t('検索の API キー（EXA_API_KEY / TAVILY_API_KEY）が未設定のため使えません', 'Unavailable: search API key (EXA_API_KEY / TAVILY_API_KEY) not set')
+          }
         >
           <input
             type="checkbox"
@@ -238,7 +244,7 @@ export function ChatPanel({ open, onClose, config, selected, getContext }: Props
               }
             }}
           />
-          🔎 ウェブ検索
+          🔎 {t('ウェブ検索', 'Web search')}
         </label>
         <div className="ml-auto flex gap-1">
           {!!msgs.length && (
@@ -249,28 +255,31 @@ export function ChatPanel({ open, onClose, config, selected, getContext }: Props
               }}
               className="rounded px-2 py-0.5 text-[11px] text-mute hover:bg-white/5 hover:text-ink"
             >
-              新しい相談
+              {t('新しい相談', 'New chat')}
             </button>
           )}
-          <button onClick={onClose} className="px-1 text-mute hover:text-ink" aria-label="閉じる">
+          <button onClick={onClose} className="px-1 text-mute hover:text-ink" aria-label={t('閉じる', 'Close')}>
             ✕
           </button>
         </div>
       </header>
 
       <p className="border-b border-line bg-warnc/5 px-3 py-1.5 text-[10px] leading-relaxed text-warnc">
-        画面のデータ{canSearch && webSearch ? 'とウェブ検索の結果' : ''}をもとに情報を整理・解説します。売買の推奨や個別の投資助言は行いません。AI の回答は誤りを含むことがあります。
+        {t(
+          `画面のデータ${canSearch && webSearch ? 'とウェブ検索の結果' : ''}をもとに情報を整理・解説します。売買の推奨や個別の投資助言は行いません。AI の回答は誤りを含むことがあります。`,
+          `Summarizes and explains the on-screen data${canSearch && webSearch ? ' and web search results' : ''}. For information only — not investment advice. AI answers may contain errors.`,
+        )}
       </p>
 
       <div className="min-h-0 flex-1 space-y-5 overflow-auto px-4 py-4">
         {!config?.anthropic && (
-          <p className="rounded bg-downc/10 p-2 text-xs text-downc">ANTHROPIC_API_KEY が未設定のため、相談機能は使えません。</p>
+          <p className="rounded bg-downc/10 p-2 text-xs text-downc">{t('ANTHROPIC_API_KEY が未設定のため、相談機能は使えません。', 'AI chat is unavailable: ANTHROPIC_API_KEY is not set.')}</p>
         )}
         {!msgs.length && config?.anthropic && (
           <div className="space-y-2">
-            <p className="text-xs text-mute">表示中の銘柄・ウォッチリスト・ニュース・経済指標をもとに答えます。例えば:</p>
+            <p className="text-xs text-mute">{t('表示中の銘柄・ウォッチリスト・ニュース・経済指標をもとに答えます。例えば:', 'Answers based on the current stock, watchlist, news and economic data. Try:')}</p>
             <div className="flex flex-wrap gap-1.5">
-              {SUGGESTIONS.map((s) => (
+              {SUGGESTIONS.map((x) => x[lang]).map((s) => (
                 <button key={s} onClick={() => send(s)} className="rounded-full border border-line px-2.5 py-1 text-[11px] hover:border-accent hover:text-accent">
                   {s}
                 </button>
@@ -303,11 +312,11 @@ export function ChatPanel({ open, onClose, config, selected, getContext }: Props
                   m.content
                 )
               ) : busy && i === msgs.length - 1 ? (
-                <span className="animate-pulse text-mute">{m.searches?.length ? '検索結果を読んでいます…' : '考えています…'}</span>
+                <span className="animate-pulse text-mute">{m.searches?.length ? t('検索結果を読んでいます…', 'Reading search results…') : t('考えています…', 'Thinking…')}</span>
               ) : null}
               {!!m.sources?.length && (
                 <details className="mt-2 rounded border border-line/70 px-2 py-1 text-[11px]" open={m.sources.length <= 6}>
-                  <summary className="cursor-pointer text-mute">出典（{m.sources.length}）</summary>
+                  <summary className="cursor-pointer text-mute">{t(`出典（${m.sources.length}）`, `Sources (${m.sources.length})`)}</summary>
                   <ol className="mt-1 space-y-0.5">
                     {m.sources.map((src, k) => (
                       <li key={src.url} className="flex gap-1.5">
@@ -316,8 +325,8 @@ export function ChatPanel({ open, onClose, config, selected, getContext }: Props
                           {src.title || src.url}
                         </a>
                         {src.providers && src.providers.length > 1 && (
-                          <span className="shrink-0 rounded bg-accent/15 px-1 text-[9px] text-accent" title="Exa と Tavily の両方で見つかった">
-                            両方
+                          <span className="shrink-0 rounded bg-accent/15 px-1 text-[9px] text-accent" title={t('Exa と Tavily の両方で見つかった', 'Found by both Exa and Tavily')}>
+                            {t('両方', 'Both')}
                           </span>
                         )}
                         {src.providers?.length === 1 && <span className="shrink-0 text-[9px] text-mute">{src.providers[0]}</span>}
@@ -345,16 +354,16 @@ export function ChatPanel({ open, onClose, config, selected, getContext }: Props
           }}
           rows={2}
           disabled={!config?.anthropic}
-          placeholder="質問を入力（Enter で送信、Shift+Enter で改行）"
+          placeholder={t('質問を入力（Enter で送信、Shift+Enter で改行）', 'Ask a question (Enter to send, Shift+Enter for newline)')}
           className="min-h-0 flex-1 resize-none rounded border border-line bg-bg px-2 py-1.5 text-[13px] outline-none focus:border-accent disabled:opacity-50"
         />
         {busy ? (
           <button type="button" onClick={() => abortRef.current?.abort()} className="rounded-md border border-line px-3 text-xs hover:bg-white/5">
-            停止
+            {t('停止', 'Stop')}
           </button>
         ) : (
           <button type="submit" disabled={!input.trim() || !config?.anthropic} className="rounded-md bg-accent px-3 text-xs font-semibold text-bg disabled:opacity-40">
-            送信
+            {t('送信', 'Send')}
           </button>
         )}
       </form>

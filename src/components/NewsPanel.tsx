@@ -1,21 +1,24 @@
 import { useEffect, useState } from 'react';
 import { api } from '../lib/api';
+import { useT } from '../lib/i18n';
 import type { NewsItem } from '../types';
 import { Card } from './ui';
 
-function ago(iso: string) {
+function ago(iso: string, t: (ja: string, en: string) => string) {
   const min = Math.round((Date.now() - new Date(iso).getTime()) / 60_000);
-  if (min < 1) return 'たった今';
-  if (min < 60) return `${min}分前`;
+  if (min < 1) return t('たった今', 'just now');
+  if (min < 60) return t(`${min}分前`, `${min}m ago`);
   const h = Math.round(min / 60);
-  if (h < 24) return `${h}時間前`;
-  return `${Math.round(h / 24)}日前`;
+  if (h < 24) return t(`${h}時間前`, `${h}h ago`);
+  const d = Math.round(h / 24);
+  return t(`${d}日前`, `${d}d ago`);
 }
 
 /** 選択中の銘柄のニュース（Yahoo Finance）。refreshKey が変わると再取得 */
 export function NewsPanel({ symbol, refreshKey }: { symbol: string | null; refreshKey: number }) {
   const [state, setState] = useState<{ symbol: string; news: NewsItem[]; error: string | null } | null>(null);
   const [loading, setLoading] = useState(false);
+  const { t } = useT();
 
   useEffect(() => {
     if (!symbol) return;
@@ -33,9 +36,9 @@ export function NewsPanel({ symbol, refreshKey }: { symbol: string | null; refre
   const news = state?.symbol === symbol ? state.news : [];
   return (
     <Card
-      title={`ニュース${symbol ? ` · ${symbol}` : ''}`}
+      title={`${t('ニュース', 'News')}${symbol ? ` · ${symbol}` : ''}`}
       className="flex min-h-0 min-w-0 flex-col"
-      right={<span className="text-[10px] text-mute">{loading ? '更新中…' : 'Yahoo Finance'}</span>}
+      right={<span className="text-[10px] text-mute">{loading ? t('更新中…', 'Updating…') : 'Yahoo Finance'}</span>}
     >
       <ul className="min-h-0 flex-1 overflow-auto">
         {state?.symbol === symbol && state.error && <li className="p-3 text-xs text-downc">{state.error}</li>}
@@ -48,7 +51,7 @@ export function NewsPanel({ symbol, refreshKey }: { symbol: string | null; refre
                 <div className="min-w-0 flex-1">
                   <p className={`line-clamp-2 text-xs leading-snug ${direct ? 'text-ink' : 'text-mute'}`}>{n.title}</p>
                   <p className="mt-0.5 truncate text-[10px] text-mute">
-                    {n.publisher} · {ago(n.time)}
+                    {n.publisher} · {ago(n.time, t)}
                     {n.related.length > 0 && <span className="ml-1 text-accent/80">{n.related.slice(0, 4).join(' ')}</span>}
                   </p>
                 </div>
@@ -56,7 +59,7 @@ export function NewsPanel({ symbol, refreshKey }: { symbol: string | null; refre
             </li>
           );
         })}
-        {!loading && state?.symbol === symbol && !news.length && !state.error && <li className="p-3 text-xs text-mute">ニュースはありません</li>}
+        {!loading && state?.symbol === symbol && !news.length && !state.error && <li className="p-3 text-xs text-mute">{t('ニュースはありません', 'No news')}</li>}
       </ul>
     </Card>
   );

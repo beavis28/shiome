@@ -1,7 +1,10 @@
+import { getLang } from './i18n';
 import type { SymbolHit, CongressTrade, FundHoldings, FundSummary, Ownership, AppConfig, EconPayload, NewsItem, OcrTicker, Quote, StockPayload, ValuationPayload, HeatmapPayload, MacroPayload, Prefs } from '../types';
 
+const withLang = (init?: RequestInit): RequestInit => ({ ...init, headers: { ...(init?.headers as Record<string, string> | undefined), 'X-Lang': getLang() } });
+
 async function getJson<T>(url: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(url, init);
+  const res = await fetch(url, withLang(init));
   const body = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error((body as { error?: string }).error ?? `HTTP ${res.status}`);
   return body as T;
@@ -34,12 +37,15 @@ export const api = {
   me: () => getJson<{ email: string | null }>('/api/me'),
   /** 相談チャット（回答はテキストのストリームで返る） */
   chat: async (messages: { role: 'user' | 'assistant'; content: string }[], dashboard: unknown, webSearch: boolean, signal?: AbortSignal) => {
-    const res = await fetch('/api/chat', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ messages, dashboard, webSearch }),
-      signal,
-    });
+    const res = await fetch(
+      '/api/chat',
+      withLang({
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ messages, dashboard, webSearch, lang: getLang() }),
+        signal,
+      }),
+    );
     if (!res.ok) {
       const body = await res.json().catch(() => ({}));
       throw new Error((body as { error?: string }).error ?? `HTTP ${res.status}`);

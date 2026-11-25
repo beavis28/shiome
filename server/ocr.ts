@@ -1,4 +1,5 @@
 // Claude（画像対応 LLM）でスクリーンショットからティッカーを読み取る
+import { tx } from './lang.ts';
 import Anthropic from '@anthropic-ai/sdk';
 import type { OcrTicker } from '../src/types.ts';
 
@@ -53,8 +54,8 @@ export async function readTickersWithClaude(images: { data: string; mediaType: s
     messages: [{ role: 'user', content }],
   });
 
-  if (res.stop_reason === 'refusal') throw new Error('画像を読み取れませんでした（リクエストが拒否されました）');
-  if (res.stop_reason === 'max_tokens') throw new Error('応答が長すぎて途中で切れました。画像の枚数を減らしてください');
+  if (res.stop_reason === 'refusal') throw new Error(tx('画像を読み取れませんでした（リクエストが拒否されました）', 'Could not read the images (the request was refused)'));
+  if (res.stop_reason === 'max_tokens') throw new Error(tx('応答が長すぎて途中で切れました。画像の枚数を減らしてください', 'The response was cut off. Try fewer images'));
   const text = res.content.flatMap((b) => (b.type === 'text' ? [b.text] : [])).join('');
   const parsed = JSON.parse(text) as { tickers: OcrTicker[] };
   const seen = new Set<string>();

@@ -1,4 +1,5 @@
 // Exa（https://exa.ai）によるウェブ検索。相談チャットのツールとして使う。
+import { tx } from './lang.ts';
 export interface ExaResult {
   title: string;
   url: string;
@@ -10,7 +11,7 @@ export interface ExaResult {
 
 export async function exaSearch(opts: { query: string; days?: number; newsOnly?: boolean; numResults?: number }): Promise<ExaResult[]> {
   const key = process.env.EXA_API_KEY;
-  if (!key) throw new Error('EXA_API_KEY が未設定です');
+  if (!key) throw new Error(tx('EXA_API_KEY が未設定です', 'EXA_API_KEY is not set'));
   const body: Record<string, unknown> = {
     query: opts.query,
     type: 'auto',
@@ -25,9 +26,9 @@ export async function exaSearch(opts: { query: string; days?: number; newsOnly?:
     body: JSON.stringify(body),
   });
   if (!res.ok) {
-    if (res.status === 401 || res.status === 403) throw new Error('EXA_API_KEY が正しくありません');
-    if (res.status === 429) throw new Error('Exa の呼び出し上限に達しました');
-    throw new Error(`Exa エラー (${res.status})`);
+    if (res.status === 401 || res.status === 403) throw new Error(tx('EXA_API_KEY が正しくありません', 'EXA_API_KEY is invalid'));
+    if (res.status === 429) throw new Error(tx('Exa の呼び出し上限に達しました', 'Exa rate limit reached'));
+    throw new Error(tx(`Exa エラー (${res.status})`, `Exa error (${res.status})`));
   }
   const json = (await res.json()) as { results?: Record<string, unknown>[] };
   return (json.results ?? []).map((r) => ({

@@ -14,6 +14,7 @@ import {
 } from 'lightweight-charts';
 import type { Bar } from '../types';
 import type { Series, Technicals } from '../lib/indicators';
+import { useT } from '../lib/i18n';
 
 const RANGES = { '3M': 63, '6M': 126, '1Y': 252 } as const;
 type Range = keyof typeof RANGES;
@@ -47,6 +48,7 @@ export function PriceChart({ bars, tech, target }: { bars: Bar[]; tech: Technica
   const targetLine = useRef<IPriceLine | null>(null);
   const fitted = useRef(false);
   const [range, setRange] = useState<Range>('6M');
+  const { t, lang } = useT();
 
   // チャートは 1 回だけ作り、データ更新時は setData だけ行う（自動更新でズームが戻らないように）
   useEffect(() => {
@@ -128,13 +130,13 @@ export function PriceChart({ bars, tech, target }: { bars: Bar[]; tech: Technica
     s.sig.setData(toLine(bars, tech.macd.signal));
     if (targetLine.current) s.candle.removePriceLine(targetLine.current);
     targetLine.current = target
-      ? s.candle.createPriceLine({ price: target, color: '#38bdf8', lineWidth: 1, lineStyle: LineStyle.Dotted, axisLabelVisible: true, title: '目標平均' })
+      ? s.candle.createPriceLine({ price: target, color: '#38bdf8', lineWidth: 1, lineStyle: LineStyle.Dotted, axisLabelVisible: true, title: t('目標平均', 'Target mean') })
       : null;
     if (!fitted.current && bars.length) {
       fitted.current = true;
       applyRange(chartRef.current, bars, range);
     }
-  }, [bars, tech, target, range]);
+  }, [bars, tech, target, range, lang, t]);
 
   useEffect(() => {
     applyRange(chartRef.current, bars, range);
@@ -149,7 +151,7 @@ export function PriceChart({ bars, tech, target }: { bars: Bar[]; tech: Technica
         <span className="flex items-center gap-1"><i className="inline-block h-0.5 w-3 bg-[#60a5fa]" />SMA50</span>
         <span className="flex items-center gap-1"><i className="inline-block h-0.5 w-3 bg-[#c084fc]" />SMA200</span>
         <span className="flex items-center gap-1"><i className="inline-block h-0.5 w-3 border-t border-dashed border-slate-400" />BB(20,2σ)</span>
-        <span className="flex items-center gap-1"><i className="inline-block h-0.5 w-3 border-t border-dotted border-sky-400" />目標平均</span>
+        <span className="flex items-center gap-1"><i className="inline-block h-0.5 w-3 border-t border-dotted border-sky-400" />{t('目標平均', 'Target mean')}</span>
         <span className="ml-auto flex gap-1">
           {(Object.keys(RANGES) as Range[]).map((r) => (
             <button

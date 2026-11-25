@@ -1,5 +1,6 @@
 // Yahoo Finance（非公式 API: yahoo-finance2）からの取得。キー不要・個人利用向け。
 // 仕様変更で突然取れなくなることがあるため、呼び出し側で FMP にフォールバックする。
+import { tx } from './lang.ts';
 import YahooFinance from 'yahoo-finance2';
 import type { Bar, Earnings, HeatItem, NewsItem, PriceTarget, Quote, Valuation } from '../src/types.ts';
 import { MAJOR_SECTOR, SECTOR_JA } from './universe.ts';
@@ -83,7 +84,7 @@ export async function yahooQuotes(symbols: string[]): Promise<Record<string, Quo
 
 export async function yahooQuote(symbol: string): Promise<Quote> {
   const q = (await yahooQuotes([symbol]))[symbol];
-  if (!q) throw new Error('Yahoo に銘柄が見つかりません');
+  if (!q) throw new Error(tx('Yahoo に銘柄が見つかりません', 'Ticker not found on Yahoo'));
   return q;
 }
 
@@ -101,7 +102,7 @@ export function yahooHistory(symbol: string) {
         close: +b.close!.toFixed(4),
         volume: b.volume ?? 0,
       }));
-    if (!bars.length) throw new Error('Yahoo に価格履歴がありません');
+    if (!bars.length) throw new Error(tx('Yahoo に価格履歴がありません', 'No price history on Yahoo'));
     return bars;
   });
 }
@@ -127,7 +128,7 @@ function summary(symbol: string) {
 export async function yahooTarget(symbol: string): Promise<PriceTarget> {
   const fd = (await summary(symbol)).financialData;
   const mean = num(fd?.targetMeanPrice);
-  if (mean === null) throw new Error('ターゲット価格のデータがありません');
+  if (mean === null) throw new Error(tx('ターゲット価格のデータがありません', 'No price-target data'));
   return {
     mean,
     median: num(fd?.targetMedianPrice),

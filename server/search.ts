@@ -1,6 +1,7 @@
 // ウェブ検索: Exa と Tavily を同時に呼び、結果を 1 つにまとめる。
 //  - URL を正規化して重複を除き、両方で見つかったページを上位に置く（信頼の目安）
 //  - 片方のキーしかなくても、ある方だけで検索する
+import { tx } from './lang.ts';
 import { exaSearch } from './exa.ts';
 
 export type Provider = 'Exa' | 'Tavily';
@@ -39,7 +40,7 @@ function normUrl(u: string) {
 
 async function tavilySearch(o: SearchOptions): Promise<SearchHit[]> {
   const key = process.env.TAVILY_API_KEY;
-  if (!key) throw new Error('TAVILY_API_KEY が未設定です');
+  if (!key) throw new Error(tx('TAVILY_API_KEY が未設定です', 'TAVILY_API_KEY is not set'));
   const body: Record<string, unknown> = {
     query: o.query,
     search_depth: 'advanced', // 2 クレジット。ページ内の関連箇所を複数抜き出してくれる
@@ -55,9 +56,9 @@ async function tavilySearch(o: SearchOptions): Promise<SearchHit[]> {
     body: JSON.stringify(body),
   });
   if (!res.ok) {
-    if (res.status === 401) throw new Error('TAVILY_API_KEY が正しくありません');
-    if (res.status === 429 || res.status === 432 || res.status === 433) throw new Error('Tavily の利用上限に達しました');
-    throw new Error(`Tavily エラー (${res.status})`);
+    if (res.status === 401) throw new Error(tx('TAVILY_API_KEY が正しくありません', 'TAVILY_API_KEY is invalid'));
+    if (res.status === 429 || res.status === 432 || res.status === 433) throw new Error(tx('Tavily の利用上限に達しました', 'Tavily usage limit reached'));
+    throw new Error(tx(`Tavily エラー (${res.status})`, `Tavily error (${res.status})`));
   }
   const json = (await res.json()) as { results?: { title?: string; url?: string; content?: string; published_date?: string | null }[] };
   return (json.results ?? [])
@@ -84,7 +85,7 @@ async function exaHits(o: SearchOptions): Promise<SearchHit[]> {
 
 export async function webSearch(o: SearchOptions): Promise<{ hits: SearchHit[]; errors: string[] }> {
   const providers = searchProviders();
-  if (!providers.length) throw new Error('検索の API キー（EXA_API_KEY / TAVILY_API_KEY）が未設定です');
+  if (!providers.length) throw new Error(tx('検索の API キー（EXA_API_KEY / TAVILY_API_KEY）が未設定です', 'No search API key is set (EXA_API_KEY / TAVILY_API_KEY)'));
   const runs = await Promise.allSettled(providers.map((p) => (p === 'Exa' ? exaHits(o) : tavilySearch(o))));
   const errors: string[] = [];
   const lists: SearchHit[][] = runs.map((r, i) => {

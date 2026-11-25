@@ -1,6 +1,7 @@
 // Cloudflare Workers の入口。画面（dist/）は静的アセットとして配信され、/api/* だけがここに来る。
 import { Hono } from 'hono';
 import { checkAccess, type AccessEnv } from './access.ts';
+import { langOf, withLang } from './lang.ts';
 import { api, type ApiEnv } from './app.ts';
 import { setCacheStore } from './cache.ts';
 import { setPrefsStore } from './prefs.ts';
@@ -26,7 +27,7 @@ app.use('/api/*', async (c, next) => {
       : null,
   );
   setPrefsStore(kv ? { get: (key) => kv.get(key), put: (key, value) => kv.put(key, value) } : null);
-  const auth = await checkAccess(c.req.raw, c.env);
+  const auth = await withLang(langOf(c.req.header('x-lang')), () => checkAccess(c.req.raw, c.env));
   if (!auth.ok) return c.json({ error: auth.error }, auth.status);
   c.set('userEmail', auth.email);
   await withYahooSession(() => next());

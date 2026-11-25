@@ -1,4 +1,5 @@
 // Financial Modeling Prep (stable API) からのデータ取得
+import { tx } from './lang.ts';
 import type { Bar, Earnings, PriceTarget, Quote } from '../src/types.ts';
 import { cached, HOUR, MIN } from './cache.ts';
 
@@ -8,26 +9,26 @@ class FmpError extends Error {}
 
 export async function fmp<T>(endpoint: string, params: Record<string, string>): Promise<T> {
   const key = process.env.FMP_API_KEY;
-  if (!key) throw new FmpError('FMP_API_KEY が未設定です');
+  if (!key) throw new FmpError(tx('FMP_API_KEY が未設定です', 'FMP_API_KEY is not set'));
   const qs = new URLSearchParams({ ...params, apikey: key });
   const res = await fetch(`${BASE}/${endpoint}?${qs}`);
   const text = await res.text();
   if (!res.ok) {
-    if (res.status === 429) throw new FmpError('FMP の 1 日の呼び出し上限に達しました（翌日に戻ります）');
+    if (res.status === 429) throw new FmpError(tx('FMP の 1 日の呼び出し上限に達しました（翌日に戻ります）', 'FMP daily limit reached (resets tomorrow)'));
     if (res.status === 402 || /premium|subscription|plan/i.test(text)) {
-      throw new FmpError('現在の FMP プランでは取得できません');
+      throw new FmpError(tx('現在の FMP プランでは取得できません', 'Not available on your FMP plan'));
     }
-    throw new FmpError(`FMP エラー (${res.status})`);
+    throw new FmpError(tx(`FMP エラー (${res.status})`, `FMP error (${res.status})`));
   }
   let json: unknown;
   try {
     json = JSON.parse(text);
   } catch {
-    throw new FmpError('FMP の応答を解析できません');
+    throw new FmpError(tx('FMP の応答を解析できません', 'Could not parse the FMP response'));
   }
   if (json && typeof json === 'object' && !Array.isArray(json) && 'Error Message' in json) {
     const msg = String((json as Record<string, unknown>)['Error Message']);
-    throw new FmpError(/premium|subscription|plan/i.test(msg) ? '現在の FMP プランでは取得できません' : msg);
+    throw new FmpError(/premium|subscription|plan/i.test(msg) ? tx('現在の FMP プランでは取得できません', 'Not available on your FMP plan') : msg);
   }
   return json as T;
 }
@@ -38,7 +39,7 @@ export function getQuote(symbol: string) {
   return cached(`fmp:quote:${symbol}`, 2 * MIN, async (): Promise<Quote> => {
     const rows = await fmp<Record<string, unknown>[]>('quote', { symbol });
     const q = rows?.[0];
-    if (!q) throw new FmpError('銘柄が見つかりません');
+    if (!q) throw new FmpError(tx('銘柄が見つかりません', 'Ticker not found'));
     const price = num(q.price) ?? 0;
     return {
       symbol,
@@ -74,7 +75,7 @@ export function getHistory(symbol: string) {
       }))
       .filter((b) => b.close > 0)
       .sort((a, b) => a.time.localeCompare(b.time));
-    if (!bars.length) throw new FmpError('価格履歴がありません');
+    if (!bars.length) throw new FmpError(tx('価格履歴がありません', 'No price history'));
     return bars;
   });
 }
@@ -83,7 +84,7 @@ export function getTarget(symbol: string) {
   return cached(`fmp:target:${symbol}`, 12 * HOUR, async (): Promise<PriceTarget> => {
     const rows = await fmp<Record<string, unknown>[]>('price-target-consensus', { symbol });
     const t = rows?.[0];
-    if (!t) throw new FmpError('ターゲット価格のデータがありません');
+    if (!t) throw new FmpError(tx('ターゲット価格のデータがありません', 'No price-target data'));
     return {
       mean: num(t.targetConsensus),
       median: num(t.targetMedian),

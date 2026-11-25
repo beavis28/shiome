@@ -2,13 +2,14 @@
 // 小窓（ドラッグで移動）⇔ 拡大 を切り替えられる。画面の他の部分は触らない。
 import { useEffect, useRef, useState, type PointerEvent as RPointerEvent } from 'react';
 import { api } from '../lib/api';
+import { pick, useT } from '../lib/i18n';
 
 export const TV_CHANNELS = [
-  { id: 'UCIALMKvObZNtJ6AmdCLP7Lg', name: 'Bloomberg', note: 'Bloomberg Television（英語）' },
-  { id: 'UCEAZeUIeJs0IjQiqTCdVSIg', name: 'Yahoo Finance', note: 'Yahoo Finance Live（英語）' },
-  { id: 'UCSPEjw8F2nQDtmUKPFNF7_A', name: 'NHK WORLD', note: 'NHK WORLD-JAPAN（英語）' },
-  { id: 'UCoMdktPbSTixAyNGwb-UYkQ', name: 'Sky News', note: 'Sky News（英語）' },
-  { id: 'UCknLrEdhRCp1aegoMqRaCZg', name: 'DW News', note: 'DW News（英語）' },
+  { id: 'UCIALMKvObZNtJ6AmdCLP7Lg', name: 'Bloomberg', note: { ja: 'Bloomberg Television（英語）', en: 'Bloomberg Television (English)' } },
+  { id: 'UCEAZeUIeJs0IjQiqTCdVSIg', name: 'Yahoo Finance', note: { ja: 'Yahoo Finance Live（英語）', en: 'Yahoo Finance Live (English)' } },
+  { id: 'UCSPEjw8F2nQDtmUKPFNF7_A', name: 'NHK WORLD', note: { ja: 'NHK WORLD-JAPAN（英語）', en: 'NHK WORLD-JAPAN (English)' } },
+  { id: 'UCoMdktPbSTixAyNGwb-UYkQ', name: 'Sky News', note: { ja: 'Sky News（英語）', en: 'Sky News (English)' } },
+  { id: 'UCknLrEdhRCp1aegoMqRaCZg', name: 'DW News', note: { ja: 'DW News（英語）', en: 'DW News (English)' } },
 ];
 
 const KEY = 'shiome.tv';
@@ -23,6 +24,7 @@ const read = (): Saved => {
 };
 
 export function TvPlayer({ onClose }: { onClose: () => void }) {
+  const { t, lang } = useT();
   const [saved, setSaved] = useState<Saved>(read);
   const [expanded, setExpanded] = useState(false);
   const boxRef = useRef<HTMLDivElement>(null);
@@ -97,7 +99,7 @@ export function TvPlayer({ onClose }: { onClose: () => void }) {
             value={ch.id}
             onChange={(e) => setSaved((s) => ({ ...s, channel: e.target.value }))}
             className="rounded border border-line bg-bg px-1.5 py-0.5 text-[11px] outline-none"
-            aria-label="チャンネル"
+            aria-label={t('チャンネル', 'Channel')}
           >
             {TV_CHANNELS.map((c) => (
               <option key={c.id} value={c.id}>
@@ -105,35 +107,35 @@ export function TvPlayer({ onClose }: { onClose: () => void }) {
               </option>
             ))}
           </select>
-          {expanded && <span className="truncate text-[10px] text-mute">{ch.note}</span>}
+          {expanded && <span className="truncate text-[10px] text-mute">{pick(ch.note, lang)}</span>}
           <span className="ml-auto flex shrink-0 items-center gap-1">
             {!expanded && (
               <>
-                <button title="小さく" onClick={() => setSaved((s) => ({ ...s, w: Math.max(280, s.w - 80) }))} className="rounded px-1.5 text-xs text-mute hover:bg-white/5 hover:text-ink">
+                <button title={t('小さく', 'Smaller')} onClick={() => setSaved((s) => ({ ...s, w: Math.max(280, s.w - 80) }))} className="rounded px-1.5 text-xs text-mute hover:bg-white/5 hover:text-ink">
                   −
                 </button>
-                <button title="大きく" onClick={() => setSaved((s) => ({ ...s, w: Math.min(720, s.w + 80) }))} className="rounded px-1.5 text-xs text-mute hover:bg-white/5 hover:text-ink">
+                <button title={t('大きく', 'Larger')} onClick={() => setSaved((s) => ({ ...s, w: Math.min(720, s.w + 80) }))} className="rounded px-1.5 text-xs text-mute hover:bg-white/5 hover:text-ink">
                   ＋
                 </button>
               </>
             )}
             <button
               onClick={() => setExpanded((v) => !v)}
-              title={expanded ? '小窓に戻す（Esc）' : '拡大する'}
+              title={expanded ? t('小窓に戻す（Esc）', 'Back to mini player (Esc)') : t('拡大する', 'Expand')}
               className="whitespace-nowrap rounded border border-line px-2 py-0.5 text-[11px] hover:bg-white/5"
             >
-              {expanded ? '⤡ 小窓' : '⤢ 拡大'}
+              {expanded ? t('⤡ 小窓', '⤡ Mini') : t('⤢ 拡大', '⤢ Expand')}
             </button>
             <a
               href={`https://www.youtube.com/channel/${ch.id}/live`}
               target="_blank"
               rel="noreferrer noopener"
-              title="YouTube で開く"
+              title={t('YouTube で開く', 'Open on YouTube')}
               className="rounded px-1.5 text-[11px] text-mute hover:bg-white/5 hover:text-ink"
             >
               ↗
             </a>
-            <button onClick={onClose} title="閉じる" className="rounded px-1.5 text-xs text-mute hover:bg-white/5 hover:text-ink">
+            <button onClick={onClose} title={t('閉じる', 'Close')} className="rounded px-1.5 text-xs text-mute hover:bg-white/5 hover:text-ink">
               ✕
             </button>
           </span>
@@ -143,17 +145,24 @@ export function TvPlayer({ onClose }: { onClose: () => void }) {
           <iframe
             key={src}
             src={src}
-            title={`${ch.name} ライブ`}
+            title={t(`${ch.name} ライブ`, `${ch.name} live`)}
             className="absolute inset-0 h-full w-full"
             allow="autoplay; encrypted-media; picture-in-picture; fullscreen"
             allowFullScreen
             referrerPolicy="strict-origin-when-cross-origin"
           />
           ) : (
-            <div className="absolute inset-0 flex items-center justify-center text-[11px] text-mute">配信を探しています…</div>
+            <div className="absolute inset-0 flex items-center justify-center text-[11px] text-mute">{t('配信を探しています…', 'Finding the stream…')}</div>
           )}
         </div>
-        {expanded && <p className="px-3 py-1.5 text-[10px] text-mute">各社が YouTube で公開している無料のライブ配信です。最初は音声が消えているので、プレーヤーの音量ボタンで音を出してください。</p>}
+        {expanded && (
+          <p className="px-3 py-1.5 text-[10px] text-mute">
+            {t(
+              '各社が YouTube で公開している無料のライブ配信です。最初は音声が消えているので、プレーヤーの音量ボタンで音を出してください。',
+              'Free live streams published by each broadcaster on YouTube. Audio starts muted; use the player volume button to unmute.',
+            )}
+          </p>
+        )}
       </div>
     </>
   );
