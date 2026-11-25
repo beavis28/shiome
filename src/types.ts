@@ -80,6 +80,7 @@ export interface EconPayload {
   events: EconEvent[];
   warnings: string[];
   fed?: { meetings: FedMeeting[]; asOf: string } | null; // 予測市場の FOMC の確率
+  market?: MarketCalendar | null; // 市場全体の決算・IPO・休場日（Finnhub）
 }
 
 export interface NewsItem {
@@ -101,6 +102,7 @@ export interface AppConfig {
   exa?: boolean;
   tavily?: boolean;
   sec?: boolean;
+  finnhub?: boolean;
 }
 
 export interface OcrTicker {
@@ -376,4 +378,18 @@ export interface FedMeeting {
   date: string; // 発表日（米国東部時間の日付）
   outcomes: { key: string; label: string; prob: number }[]; // key: C26 / C25 / H0 / H25 / H26
   url: string;
+}
+
+/** 市場全体の予定（Finnhub）: 主要企業の決算、IPO、休場日 */
+export interface MarketCalendar {
+  earnings: { symbol: string; date: string; hour: string; epsEstimate: number | null; revenueEstimate: number | null }[];
+  ipos: { symbol: string; name: string; date: string; exchange: string; price: string; status: string; value: number | null }[];
+  holidays: { name: string; date: string; hours: string }[]; // hours が空でなければ短縮取引
+  errors: string[];
+}
+
+/** 役員の売買センチメント（Finnhub の MSPR: -100 = 売り一色 〜 +100 = 買い一色） */
+export interface InsiderSentiment {
+  symbol: string;
+  months: { month: string; mspr: number; change: number }[]; // change = 役員の保有株の増減（株）
 }

@@ -13,6 +13,7 @@ import { buildDashboardContext } from './lib/context';
 import { WatchlistTable } from './components/WatchlistTable';
 import { api } from './lib/api';
 import { setLang, useT, type Lang } from './lib/i18n';
+import { useLiveStream, type Tick } from './lib/live';
 import { derive, type Derived, type StockState } from './lib/derive';
 import { DEFAULT_WATCHLIST, loadWatchlist, saveWatchlist } from './lib/watchlist';
 import type { AppConfig, EconPayload, MacroPayload, Prefs, Valuation } from './types';
@@ -102,6 +103,7 @@ function StatusMenu({ config, sync, me, align = 'right' }: { config: AppConfig |
     { label: 'FRED', on: config?.fred, use: t('経済指標と発表日', 'Economic data and release dates'), off: t('未設定（FOMC だけ表示）', 'Not set (FOMC only)') },
     { label: 'SEC', on: config?.sec, use: t('有名投資家の 13F', "Famous investors' 13F"), off: t('未設定（SEC_USER_AGENT）', 'Not set (SEC_USER_AGENT)') },
     { label: 'Claude', on: config?.anthropic, use: t('AI に相談・画像の読み取り', 'Ask AI, reading images'), off: t('未設定（ブラウザ内 OCR）', 'Not set (in-browser OCR)') },
+    { label: 'Finnhub', on: config?.finnhub, use: t('リアルタイム株価・市場全体の決算・同業他社', 'Live prices, market earnings, peers'), off: t('未設定（20秒ごとの更新）', 'Not set (20s polling)') },
     { label: 'Exa', on: config?.exa, use: t('相談のウェブ検索', 'Web search in chat'), off: t('未設定', 'Not set') },
     { label: 'Tavily', on: config?.tavily, use: t('相談のウェブ検索', 'Web search in chat'), off: t('未設定', 'Not set') },
   ];
@@ -196,6 +198,10 @@ export default function App() {
   const [mTab, setMTab] = useState<MobileTab>('list');
   const compareMode = isMobile ? mTab === 'compare' : view === 'compare';
   const [compareSel, setCompareSel] = useState<string[]>(() => readLS('shiome.compare.symbols', [] as string[]));
+  // 「同業他社と比べる」で足した、ウォッチリストにない銘柄（この端末だけ）
+  const [peerExtra, setPeerExtra] = useState<string[]>([]);
+  const [peersBusy, setPeersBusy] = useState(false);
+  const [peersError, setPeersError] = useState<string | null>(null);
   const [compareMetrics, setCompareMetrics] = useState<(keyof Valuation)[]>(() => readLS('shiome.compare.metrics', DEFAULT_METRICS));
   const [valuation, setValuation] = useState<{ data: Record<string, Valuation>; errors: Record<string, string> }>({ data: {}, errors: {} });
   const [valuationLoading, setValuationLoading] = useState(false);
@@ -257,6 +263,33 @@ export default function App() {
     const missing = symbols.filter((s) => !states[s]);
     if (missing.length) load(missing);
   }, [symbols, states, load]);
+
+  // リアルタイム株価（Finnhub の約定をサーバー経由で受け取り、現在値・時間外の価格に反映）
+  const applyTicks = useCallback((ticks: Tick[]) => {
+    setStates((st) => {
+      const next = { ...st };
+      for (const [s, p] of ticks) {
+        const cur = next[s];
+        const q = cur?.data?.quote.data;
+        if (!cur?.data || !q || !(p > 0)) continue;
+        const regular = q.marketState === 'REGULAR';
+        const nq = regular
+          ? { ...q, price: p, change: p - q.previousClose, changePercent: ((p - q.previousClose) / q.previousClose) * 100, dayHigh: Math.max(q.dayHigh, p), dayLow: Math.min(q.dayLow, p), time: new Date().toISOString() }
+          : q.marketState === 'PRE' || q.marketState === 'POST' || q.marketState === 'POSTPOST' || q.marketState === 'PREPRE'
+            ? { ...q, extPrice: p, extChangePercent: ((p - q.price) / q.price) * 100, extLabel: q.extLabel ?? (q.marketState?.startsWith('PRE') ? 'プレ' : 'アフター') }
+            : q;
+        if (nq !== q) next[s] = { ...cur, data: { ...cur.data, quote: { ...cur.data.quote, data: nq } } };
+      }
+      return next;
+    });
+  }, []);
+  const live = useLiveStream(symbols, !!config?.finnhub && !config.demo, applyTicks);
+  const [, setNow] = useState(0);
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 2000);
+    return () => clearInterval(id);
+  }, []);
+  const tickFresh = live.lastTick !== null && Date.now() - live.lastTick < 5000;
 
   // 米国市場の状態（いずれかの銘柄の marketState から判定）
   const marketState = useMemo(() => {
@@ -325,8 +358,34 @@ export default function App() {
 
   const compareSymbols = useMemo(() => {
     const sel = compareSel.filter((s) => symbols.includes(s));
-    return sel.length ? sel : symbols.slice(0, 12);
-  }, [compareSel, symbols]);
+    const base = sel.length ? sel : symbols.slice(0, 12);
+    return [...base, ...peerExtra.filter((s) => !base.includes(s))];
+  }, [compareSel, symbols, peerExtra]);
+
+  /** 選んでいる銘柄の同業他社（Finnhub）をまとめて比較に入れる */
+  const addPeers = async () => {
+    if (!selected) return;
+    setPeersBusy(true);
+    setPeersError(null);
+    try {
+      const list = (await api.peers(selected)).peers.slice(0, 8);
+      setCompareSel([selected, ...list.filter((s) => symbols.includes(s))]);
+      setPeerExtra(list.filter((s) => !symbols.includes(s)));
+    } catch (e) {
+      setPeersError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setPeersBusy(false);
+    }
+  };
+  const peerProps = config?.finnhub
+    ? { focus: selected, busy: peersBusy, error: peersError, extra: peerExtra, onAdd: addPeers, onClear: () => setPeerExtra([]) }
+    : undefined;
+
+  /** カレンダーなどから銘柄を開く（ウォッチリストになければ足す） */
+  const openSymbol = (s: string) => {
+    if (symbols.includes(s)) setSelected(s);
+    else add([s]);
+  };
 
   useEffect(() => {
     if (!compareMode) return;
@@ -509,6 +568,15 @@ export default function App() {
               <i className={`inline-block h-1.5 w-1.5 rounded-full ${marketState === 'REGULAR' ? 'animate-pulse bg-upc' : marketActive ? 'bg-warnc' : 'bg-mute'}`} />
               <span className="max-md:hidden">{MARKET_LABEL[marketState ?? '']?.split('|')[lang === 'en' ? 1 : 0] ?? '—'}</span>
             </span>
+            {live.status === 'live' && (
+              <span
+                className={`flex shrink-0 items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-semibold ring-1 ring-inset ${tickFresh ? 'text-upc ring-upc/40' : 'text-mute ring-white/10'}`}
+                title={t('Finnhub の約定をそのまま反映しています（取引のたびに更新）', 'Prices update on every trade (Finnhub)')}
+              >
+                <i className={`inline-block h-1.5 w-1.5 rounded-full ${tickFresh ? 'animate-pulse bg-upc' : 'bg-mute'}`} />
+                <span className="max-md:hidden">{t('リアルタイム', 'LIVE')}</span>
+              </span>
+            )}
             {liveAt && (
               <span className="num truncate max-md:hidden">
                 {t('最終更新', 'Updated')} {new Date(liveAt).toLocaleTimeString(lang === 'en' ? 'en-US' : 'ja-JP')} · {t('自動更新', 'auto')} {marketActive ? t('20秒', '20s') : t('5分', '5m')}
@@ -619,6 +687,7 @@ export default function App() {
                   onFocus={setSelected}
                   metrics={compareMetrics}
                   onMetrics={setCompareMetrics}
+                  peers={peerProps}
                 />
               </div>
             )}
@@ -653,7 +722,7 @@ export default function App() {
                   <NewsPanel symbol={selected} refreshKey={newsKey} />
                 </div>
                 <div className="h-[70vh]">
-                  <EconCalendar econ={econ} econError={econError} earnings={earnings} onSelect={(s) => { setSelected(s); setMTab('detail'); }} />
+                  <EconCalendar econ={econ} econError={econError} earnings={earnings} onSelect={(s) => { openSymbol(s); setMTab('detail'); }} />
                 </div>
               </div>
             )}
@@ -728,6 +797,7 @@ export default function App() {
                 onFocus={setSelected}
                 metrics={compareMetrics}
                 onMetrics={setCompareMetrics}
+                peers={peerProps}
               />
             ) : selected ? (
               <DetailPanel symbol={selected} state={states[selected]} d={derived[selected]} />
@@ -737,7 +807,7 @@ export default function App() {
           </div>
           <div className="grid min-h-0 min-w-0 grid-rows-[minmax(0,1fr)_minmax(0,1fr)] gap-2">
             <NewsPanel symbol={selected} refreshKey={newsKey} />
-            <EconCalendar econ={econ} econError={econError} earnings={earnings} onSelect={setSelected} />
+            <EconCalendar econ={econ} econError={econError} earnings={earnings} onSelect={(s) => { openSymbol(s); setView('detail'); }} />
           </div>
         </main>
       )}

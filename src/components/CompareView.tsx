@@ -149,9 +149,11 @@ interface Props {
   onFocus: (s: string) => void;
   metrics: (keyof Valuation)[];
   onMetrics: (m: (keyof Valuation)[]) => void;
+  /** 同業他社（Finnhub）。キーがないときは渡さない */
+  peers?: { focus: string | null; busy: boolean; error: string | null; extra: string[]; onAdd: () => void; onClear: () => void };
 }
 
-export function CompareView({ symbols, data, errors, loading, focus, onFocus, metrics, onMetrics }: Props) {
+export function CompareView({ symbols, data, errors, loading, focus, onFocus, metrics, onMetrics, peers }: Props) {
   const { t, lang } = useT();
   const rows = useMemo(() => symbols.map((s) => data[s]).filter(Boolean), [symbols, data]);
   const [sortKey, setSortKey] = useState<keyof Valuation | null>(null);
@@ -189,6 +191,33 @@ export function CompareView({ symbols, data, errors, loading, focus, onFocus, me
         ))}
         <span className="ml-auto text-[10px] text-mute">{loading ? t('読み込み中…', 'Loading…') : t(`${rows.length} 銘柄 · Yahoo Finance`, `${rows.length} stocks · Yahoo Finance`)}</span>
       </Card>
+
+      {peers && (
+        <Card className="flex flex-wrap items-center gap-x-3 gap-y-1 px-3 py-1.5 text-[11px]">
+          <button
+            onClick={peers.onAdd}
+            disabled={!peers.focus || peers.busy}
+            className="rounded-md border border-accent/50 bg-accent/10 px-2.5 py-0.5 font-semibold text-accent hover:bg-accent/20 disabled:opacity-50"
+            title={t('Finnhub の同業他社の一覧から、最大 8 社を比較に入れます', "Adds up to 8 peers from Finnhub's peer list")}
+          >
+            {peers.busy ? t('読み込み中…', 'Loading…') : peers.focus ? t(`＋ ${peers.focus} の同業他社と比べる`, `+ Compare ${peers.focus} with peers`) : t('＋ 同業他社と比べる', '+ Compare with peers')}
+          </button>
+          {peers.extra.length > 0 && (
+            <span className="flex flex-wrap items-center gap-1 text-mute">
+              {t('ウォッチリスト外:', 'Not in watchlist:')}
+              {peers.extra.map((s) => (
+                <span key={s} className="rounded bg-white/5 px-1.5 text-ink">
+                  {s}
+                </span>
+              ))}
+              <button onClick={peers.onClear} className="ml-1 rounded px-1 hover:bg-white/5 hover:text-ink" title={t('ウォッチリスト外の銘柄を外す', 'Remove the non-watchlist stocks')}>
+                ✕
+              </button>
+            </span>
+          )}
+          {peers.error && <span className="text-downc">{peers.error}</span>}
+        </Card>
+      )}
 
       {!symbols.length ? (
         <Card className="flex flex-1 items-center justify-center text-sm text-mute">{t('左のウォッチリストで、比べたい銘柄にチェックを入れてください', 'Check the stocks to compare in the watchlist')}</Card>

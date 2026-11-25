@@ -22,5 +22,8 @@
   // 公開 URL は workers.dev の 1 つだけにする（プレビュー URL は Access の対象外になりやすいため無効）
   "workers_dev": true,
   "preview_urls": false,
+  // リアルタイム株価の中継（Finnhub への接続を 1 本にまとめる）
+  "durable_objects": { "bindings": [{ "name": "PRICE_HUB", "class_name": "PriceHubDO" }] },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["PriceHubDO"] }],
   "observability": { "enabled": true }
 }

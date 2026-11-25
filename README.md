@@ -50,6 +50,7 @@
 - **Live business TV** — a draggable mini player that expands to a large view: Bloomberg Television, Yahoo Finance, NHK WORLD-JAPAN, Sky News and DW News (official YouTube live streams).
 - **Ask AI about the screen** — Claude explains what you are looking at, searches the web with **Exa and Tavily** together when it needs fresh information (with sources), and answers with **charts** (Chart.js: bar, line, area, doughnut, radar, scatter, bubble; three.js: rotatable 3D scatter) and tables. It is instructed never to give buy/sell recommendations, price targets or personal advice.
 - **English / Japanese** — switch the whole interface with the JA / EN toggle in the header (first visit follows your browser language). The AI chat answers in the selected language.
+- **Real-time prices** — with a Finnhub key, prices update on every trade. Finnhub's free key allows one streaming connection, so a Durable Object holds that single connection and fans prices out to every open screen; the key never reaches the browser.
 - **Auto refresh** — every 20 seconds while the US market (including pre/post) is open, every 5 minutes otherwise.
 
 ### Quick start
@@ -68,6 +69,7 @@ Open <http://localhost:5180>. With no keys at all, Shiome still works using Yaho
 | `FRED_API_KEY` | [FRED](https://fred.stlouisfed.org/docs/api/api_key.html): release dates of economic indicators | Only FOMC dates are shown |
 | `ANTHROPIC_API_KEY` | [Claude](https://console.anthropic.com): reading tickers from images, the chat panel | Tesseract.js OCR; chat is off |
 | `EXA_API_KEY` | [Exa](https://exa.ai): web search in the chat | Search uses Tavily only (or is off) |
+| `FINNHUB_API_KEY` | [Finnhub](https://finnhub.io): real-time prices, market-wide earnings / IPO / holiday calendar, peers, insider sentiment | 20-second polling; those extras are hidden |
 | `TAVILY_API_KEY` | [Tavily](https://tavily.com): web search in the chat | Search uses Exa only (or is off) |
 | `SEC_USER_AGENT` | Not a key: your name and email, which [SEC EDGAR asks for](https://www.sec.gov/os/accessing-edgar-data) in the User-Agent (e.g. `Shiome Jane Doe jane@example.com`). Used for famous investors' 13F filings | The famous-investor holdings are off |
 
@@ -80,7 +82,7 @@ The web app is served as static assets and the API runs in the same Worker. **Th
 ```bash
 npx wrangler login
 npm run deploy                          # creates the KV namespace on first deploy
-npx wrangler secret put FMP_API_KEY     # repeat for FRED_API_KEY / ANTHROPIC_API_KEY / EXA_API_KEY / TAVILY_API_KEY
+npx wrangler secret put FMP_API_KEY     # repeat for FRED_API_KEY / ANTHROPIC_API_KEY / EXA_API_KEY / TAVILY_API_KEY / FINNHUB_API_KEY / SEC_USER_AGENT
 ```
 
 Then, in the Cloudflare dashboard:
@@ -132,6 +134,7 @@ The FOMC schedule in `server/econ.ts` is maintained by hand — update it when t
 - **経済ニュースのライブ TV** — 小窓（ドラッグで移動）と拡大を切り替えられるプレーヤー。Bloomberg Television、Yahoo Finance、NHK WORLD-JAPAN、Sky News、DW News（YouTube の公式ライブ）。
 - **AI に相談** — 表示中のデータを Claude が解説。最新情報が必要なときは **Exa と Tavily を同時に**使ってウェブ検索し、出典付きで答えます。**図**（Chart.js の棒・折れ線・面・ドーナツ・レーダー・散布図・バブル、three.js の回せる 3D 散布図）や表でも示します。売買の推奨や個別の投資助言はしないよう指示しています。
 - **日本語 / 英語** — ヘッダーの JA / EN で画面全体の言語を切り替えられます（最初はブラウザの言語に合わせます）。AI に相談の回答も選んだ言語になります。
+- **リアルタイム株価** — Finnhub のキーがあると、約定のたびに株価が動きます。無料キーは同時に 1 本しか配信をつなげないため、Durable Object が 1 本だけ持って、開いている画面すべてに配ります。キーはブラウザに渡しません。
 - **自動更新** — 米国市場の取引時間中（プレ・アフター含む）は 20 秒ごと、それ以外は 5 分ごと。
 
 ### はじめ方

@@ -5,7 +5,7 @@ import { api } from '../lib/api';
 import { fmtBig, fmtDate } from '../lib/format';
 import { useT, type Lang } from '../lib/i18n';
 import { managerName } from '../lib/names';
-import type { CongressTrade, Filings, FundHoldings, FundPosition, FundSummary, Ownership } from '../types';
+import type { InsiderSentiment, CongressTrade, Filings, FundHoldings, FundPosition, FundSummary, Ownership } from '../types';
 import { Badge, Card } from './ui';
 
 type Tab = 'stock' | 'funds' | 'congress';
@@ -203,6 +203,99 @@ function FilingCards({ symbol }: { symbol: string }) {
   );
 }
 
+// ------------------------------------------------------------------ 役員の売買センチメント（Finnhub の MSPR）
+
+// 買い越しは青緑、売り越しは赤橙（ヒートマップと同じ、色覚の違いでも見分けやすい組み合わせ）
+const BUY_C = '#0d9488';
+const SELL_C = '#e0533d';
+
+function InsiderSentimentCard({ symbol }: { symbol: string }) {
+  const { t, lang } = useT();
+  const [st, setSt] = useState<{ symbol: string; data: InsiderSentiment | null; error: string | null } | null>(null);
+  const [hover, setHover] = useState<number | null>(null);
+  useEffect(() => {
+    let alive = true;
+    api.insiderSentiment(symbol).then(
+      (d) => alive && setSt({ symbol, data: d, error: null }),
+      (e) => alive && setSt({ symbol, data: null, error: e instanceof Error ? e.message : String(e) }),
+    );
+    return () => {
+      alive = false;
+    };
+  }, [symbol]);
+  const s = st?.symbol === symbol ? st : null;
+  const months = s?.data?.months.slice(-24) ?? [];
+  const last6 = months.slice(-6);
+  const avg6 = last6.length ? last6.reduce((a, m) => a + m.mspr, 0) / last6.length : null;
+  const net6 = last6.reduce((a, m) => a + m.change, 0);
+  const label = (m: string) => (lang === 'en' ? `${['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][Number(m.slice(5)) - 1]} ${m.slice(0, 4)}` : `${m.slice(0, 4)}年${Number(m.slice(5))}月`);
+  const h = hover !== null ? months[hover] : null;
+  return (
+    <Card title={t('役員の売買センチメント（月ごと）', 'Insider sentiment (monthly)')} right={<span className="text-[10px] text-mute">Finnhub · MSPR</span>}>
+      {!s && <p className="p-3 text-xs text-mute">{t('読み込み中…', 'Loading…')}</p>}
+      {s?.error && <p className="p-3 text-xs text-mute">{s.error}</p>}
+      {s?.data && !months.length && <p className="p-3 text-xs text-mute">{t('データがありません', 'No data')}</p>}
+      {months.length > 0 && (
+        <div className="px-3 py-2">
+          <div className="flex flex-wrap items-baseline gap-x-4 text-[11px]">
+            <span>
+              <span className="text-mute">{t('直近 6 か月の平均 ', '6-month average ')}</span>
+              <span className="num font-semibold" style={{ color: avg6 === null ? undefined : avg6 >= 0 ? BUY_C : SELL_C }}>
+                {avg6 === null ? '—' : `${avg6 > 0 ? '+' : ''}${avg6.toFixed(0)}`}
+              </span>
+            </span>
+            <span>
+              <span className="text-mute">{t('役員の保有株の増減 ', 'Net insider shares ')}</span>
+              <span className="num">{`${net6 > 0 ? '+' : net6 < 0 ? '−' : ''}${fmtBig(Math.abs(net6))}`}</span>
+            </span>
+            <span className="ml-auto text-[10px] text-mute">{h ? `${label(h.month)}: ${h.mspr > 0 ? '+' : ''}${h.mspr.toFixed(0)} · ${h.change > 0 ? '+' : ''}${h.change.toLocaleString('en-US')} ${t('株', 'sh')}` : ''}</span>
+          </div>
+          {/* 0 を中心に、上が買い越し・下が売り越し */}
+          <div className="relative mt-2 flex h-24 items-stretch gap-[2px]" onMouseLeave={() => setHover(null)} role="img" aria-label={t('月ごとの役員の売買センチメント', 'Monthly insider sentiment')}>
+            <div className="pointer-events-none absolute inset-x-0 top-1/2 border-t border-line" />
+            {months.map((m, i) => {
+              const hgt = (Math.min(100, Math.abs(m.mspr)) / 100) * 50;
+              return (
+                <div key={m.month} className="relative flex-1 cursor-default" onMouseEnter={() => setHover(i)}>
+                  <div
+                    className="absolute inset-x-0 rounded-[2px]"
+                    style={{
+                      background: m.mspr >= 0 ? BUY_C : SELL_C,
+                      opacity: hover === null || hover === i ? 1 : 0.45,
+                      height: `${Math.max(hgt, m.mspr === 0 ? 0 : 1.5)}%`,
+                      ...(m.mspr >= 0 ? { bottom: '50%' } : { top: '50%' }),
+                    }}
+                  />
+                </div>
+              );
+            })}
+          </div>
+          <div className="mt-0.5 flex justify-between text-[10px] text-mute">
+            <span>{label(months[0].month)}</span>
+            <span className="flex gap-3">
+              <span className="flex items-center gap-1">
+                <i className="inline-block h-2 w-2 rounded-sm" style={{ background: BUY_C }} />
+                {t('買い越し', 'Net buying')}
+              </span>
+              <span className="flex items-center gap-1">
+                <i className="inline-block h-2 w-2 rounded-sm" style={{ background: SELL_C }} />
+                {t('売り越し', 'Net selling')}
+              </span>
+            </span>
+            <span>{label(months[months.length - 1].month)}</span>
+          </div>
+        </div>
+      )}
+      <p className="border-t border-line/50 px-3 py-1.5 text-[10px] text-mute">
+        {t(
+          'Form 4 の売買を月ごとに −100（売り一色）〜 +100（買い一色）の点数にしたもの。役員は報酬の株を定期的に売ることが多いため、買い越しの月のほうが目立つ材料になります。',
+          'Form 4 trades scored per month from −100 (all selling) to +100 (all buying). Insiders often sell stock pay on a schedule, so buying months stand out more.',
+        )}
+      </p>
+    </Card>
+  );
+}
+
 function StockTab({ symbol, funds, allFunds, onShowFund }: { symbol: string; funds: FundSummary[] | null; allFunds: Record<string, FundHoldings | string>; onShowFund: (cik: string) => void }) {
   const { t, lang } = useT();
   const [own, setOwn] = useState<{ symbol: string; data: Ownership | null; error: string | null } | null>(null);
@@ -388,6 +481,8 @@ function StockTab({ symbol, funds, allFunds, onShowFund }: { symbol: string; fun
         )}
         {!o?.data && <p className="p-3 text-xs text-mute">{o?.error ?? t('読み込み中…', 'Loading…')}</p>}
       </Card>
+
+      <InsiderSentimentCard symbol={symbol} />
 
       <FilingCards symbol={symbol} />
 

@@ -17,6 +17,7 @@ import { congressTrades, FUNDS, fundHoldings, ownership } from './smart.ts';
 import { MAJOR_SYMBOLS } from './universe.ts';
 import { yahooAnalyst, yahooHeatmap, yahooNews, yahooValuation } from './yahoo.ts';
 import { filingsFor } from './filings.ts';
+import { insiderSentiment, peers } from './finnhub.ts';
 
 const SYMBOL_RE = /^[A-Z]{1,5}([.-][A-Z]{1,2})?$/;
 const parseSymbols = (v: unknown) =>
@@ -33,6 +34,7 @@ export const config = (): AppConfig => ({
   exa: !!process.env.EXA_API_KEY,
   tavily: !!process.env.TAVILY_API_KEY,
   sec: !!process.env.SEC_USER_AGENT,
+  finnhub: !!process.env.FINNHUB_API_KEY,
 });
 
 /** worker.ts が Access のログイン情報を入れる */
@@ -187,6 +189,26 @@ api.get('/filings/:symbol', async (c) => {
     return c.json(await filingsFor(symbol));
   } catch (e) {
     return c.json({ error: tx(`SEC の届け出を取得できませんでした（${msg(e)}）`, `Could not load SEC filings (${msg(e)})`) }, 502);
+  }
+});
+
+api.get('/peers/:symbol', async (c) => {
+  const symbol = c.req.param('symbol').toUpperCase();
+  if (!SYMBOL_RE.test(symbol)) return c.json({ error: tx('ティッカーの形式が正しくありません', 'Invalid ticker format') }, 400);
+  try {
+    return c.json({ symbol, peers: await peers(symbol) });
+  } catch (e) {
+    return c.json({ error: tx(`同業他社を取得できませんでした（${msg(e)}）`, `Could not load peers (${msg(e)})`) }, 502);
+  }
+});
+
+api.get('/insider-sentiment/:symbol', async (c) => {
+  const symbol = c.req.param('symbol').toUpperCase();
+  if (!SYMBOL_RE.test(symbol)) return c.json({ error: tx('ティッカーの形式が正しくありません', 'Invalid ticker format') }, 400);
+  try {
+    return c.json(await insiderSentiment(symbol));
+  } catch (e) {
+    return c.json({ error: tx(`役員の売買センチメントを取得できませんでした（${msg(e)}）`, `Could not load insider sentiment (${msg(e)})`) }, 502);
   }
 });
 
