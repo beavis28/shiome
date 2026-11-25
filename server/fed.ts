@@ -11,7 +11,8 @@ const n = (v: unknown) => {
 export function fedOdds(): Promise<{ meetings: FedMeeting[]; asOf: string }> {
   return cached('kalshi:fed:v1', 15 * MIN, async () => {
     const res = await fetch('https://api.elections.kalshi.com/trade-api/v2/events?series_ticker=KXFEDDECISION&status=open&with_nested_markets=true&limit=6', {
-      headers: { Accept: 'application/json' },
+      headers: { Accept: 'application/json', 'User-Agent': 'Shiome (github.com/beavis28/shiome)' },
+      signal: AbortSignal.timeout(8_000),
     });
     if (!res.ok) throw new Error(`Kalshi ${res.status}`);
     const d = (await res.json()) as { events?: { event_ticker: string; strike_date?: string; markets?: Record<string, unknown>[] }[] };

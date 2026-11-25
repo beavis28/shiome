@@ -2,6 +2,7 @@
 //  - 現在値と前日比: Yahoo Finance（まとめて 1 回で取得、60 秒キャッシュ）
 //  - 約 3 か月の推移: Yahoo の日足（1 時間キャッシュ）
 //  - 2 年債・FF 金利・10年-2年差: FRED（6 時間キャッシュ。FRED_API_KEY がある場合のみ）
+import { fredFetch } from './fred.ts';
 import { tx } from './lang.ts';
 import type { Indicator, MacroGroup, MacroItem, MacroPayload } from '../src/types.ts';
 import { cached, HOUR } from './cache.ts';
@@ -102,7 +103,7 @@ async function fredSeries(def: Def, key: string): Promise<MacroItem> {
   const obs = await cached(`macro:fred:${def.id}`, 6 * HOUR, async () => {
     const start = new Date(Date.now() - 100 * 86400_000).toISOString().slice(0, 10);
     const qs = new URLSearchParams({ series_id: def.id, api_key: key, file_type: 'json', observation_start: start, sort_order: 'asc' });
-    const res = await fetch(`https://api.stlouisfed.org/fred/series/observations?${qs}`);
+    const res = await fredFetch(`https://api.stlouisfed.org/fred/series/observations?${qs}`);
     if (!res.ok) throw new Error(tx(`FRED エラー (${res.status})`, `FRED error (${res.status})`));
     const j = (await res.json()) as { observations?: { date: string; value: string }[] };
     return (j.observations ?? []).filter((o) => o.value !== '.').map((o) => [o.date, Number(o.value)] as [string, number]);
@@ -144,7 +145,7 @@ async function fetchIndicators(key: string, warnings: string[]): Promise<Indicat
     INDICATORS.map((d) =>
       cached(`macro:ind:${d.id}:${d.units}`, 6 * HOUR, async () => {
         const qs = new URLSearchParams({ series_id: d.id, api_key: key, file_type: 'json', units: d.units, observation_start: start, sort_order: 'asc' });
-        const r = await fetch(`https://api.stlouisfed.org/fred/series/observations?${qs}`);
+        const r = await fredFetch(`https://api.stlouisfed.org/fred/series/observations?${qs}`);
         if (!r.ok) throw new Error(tx(`FRED エラー (${r.status})`, `FRED error (${r.status})`));
         const j = (await r.json()) as { observations?: { date: string; value: string }[] };
         let obs = (j.observations ?? []).filter((o) => o.value !== '.').map((o) => [o.date, Number(o.value)] as [string, number]);

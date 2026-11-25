@@ -2,13 +2,16 @@
 // 仕様変更で突然取れなくなることがあるため、呼び出し側で FMP にフォールバックする。
 import { tx } from './lang.ts';
 import YahooFinance from 'yahoo-finance2';
+import { ExtendedCookieJar } from 'yahoo-finance2/lib/cookieJar';
 import type { AnalystData, Bar, Earnings, HeatItem, NewsItem, PriceTarget, Quote, Valuation } from '../src/types.ts';
 import { MAJOR_SECTOR, SECTOR_JA } from './universe.ts';
 import { cached, HOUR, MIN } from './cache.ts';
 
 import { AsyncLocalStorage } from 'node:async_hooks';
 
-const newClient = () => new YahooFinance({ suppressNotices: ['yahooSurvey'] });
+// クッキー置き場（と、それに紐づく認証用の crumb の取得）はリクエストごとに分ける。
+// 既定では全クライアントで 1 つを共有するため、Workers では別のリクエストが始めた crumb の取得を待って止まる
+const newClient = () => new YahooFinance({ suppressNotices: ['yahooSurvey'], cookieJar: new ExtendedCookieJar() });
 const shared = newClient();
 const perRequest = new AsyncLocalStorage<InstanceType<typeof YahooFinance>>();
 

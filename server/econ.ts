@@ -7,6 +7,7 @@ import { tx } from './lang.ts';
 import type { EconEvent, EconPayload } from '../src/types.ts';
 import { cached, HOUR } from './cache.ts';
 import { fedOdds } from './fed.ts';
+import { fredFetch } from './fred.ts';
 
 const FOMC_MEETINGS: { start: string; end: string; note?: string }[] = [
   { start: '2026-01-27', end: '2026-01-28' },
@@ -65,7 +66,7 @@ async function fredRelease(rel: (typeof FRED_RELEASES)[number], apiKey: string):
       sort_order: 'asc',
       limit: '60',
     });
-    const res = await fetch(`https://api.stlouisfed.org/fred/release/dates?${qs}`);
+    const res = await fredFetch(`https://api.stlouisfed.org/fred/release/dates?${qs}`);
     if (!res.ok) {
       const body = (await res.json().catch(() => ({}))) as { error_message?: string };
       if (/api_key/i.test(body.error_message ?? '')) {
