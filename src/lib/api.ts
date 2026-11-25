@@ -1,4 +1,4 @@
-import type { AppConfig, EconPayload, NewsItem, OcrTicker, Quote, StockPayload, ValuationPayload, HeatmapPayload, MacroPayload, Prefs } from '../types';
+import type { CongressTrade, FundHoldings, FundSummary, Ownership, AppConfig, EconPayload, NewsItem, OcrTicker, Quote, StockPayload, ValuationPayload, HeatmapPayload, MacroPayload, Prefs } from '../types';
 
 async function getJson<T>(url: string, init?: RequestInit): Promise<T> {
   const res = await fetch(url, init);
@@ -16,6 +16,10 @@ export const api = {
   valuation: (symbols: string[]) => getJson<ValuationPayload>(`/api/valuation?symbols=${encodeURIComponent(symbols.join(','))}`),
   heatmap: (universe: 'major' | 'watchlist', symbols: string[]) =>
     getJson<HeatmapPayload>(`/api/heatmap?universe=${universe}${symbols.length ? `&symbols=${encodeURIComponent(symbols.join(','))}` : ''}`),
+  funds: () => getJson<{ funds: FundSummary[]; enabled: boolean }>('/api/funds'),
+  fund: (cik: string) => getJson<FundHoldings>(`/api/funds/${encodeURIComponent(cik)}`),
+  ownership: (symbol: string) => getJson<Ownership>(`/api/ownership/${encodeURIComponent(symbol)}`),
+  congress: (symbol?: string) => getJson<{ trades: CongressTrade[] }>(`/api/congress${symbol ? `?symbol=${encodeURIComponent(symbol)}` : ''}`),
   macro: () => getJson<MacroPayload>('/api/macro'),
   tv: (channel: string) => getJson<{ videoId: string | null }>(`/api/tv/${encodeURIComponent(channel)}`),
   prefs: () => getJson<{ sync: boolean; prefs: Prefs | null }>('/api/prefs'),

@@ -11,6 +11,7 @@ import { loadPrefs, prefsAvailable, sanitize, savePrefs } from './prefs.ts';
 import { validateSymbol } from './fmp.ts';
 import { readTickersWithClaude } from './ocr.ts';
 import { fetchQuotes, fetchStock } from './stock.ts';
+import { congressTrades, FUNDS, fundHoldings, ownership } from './smart.ts';
 import { MAJOR_SYMBOLS } from './universe.ts';
 import { yahooHeatmap, yahooNews, yahooValuation } from './yahoo.ts';
 
@@ -28,6 +29,7 @@ export const config = (): AppConfig => ({
   anthropic: !!process.env.ANTHROPIC_API_KEY,
   exa: !!process.env.EXA_API_KEY,
   tavily: !!process.env.TAVILY_API_KEY,
+  sec: !!process.env.SEC_USER_AGENT,
 });
 
 /** worker.ts が Access のログイン情報を入れる */
@@ -137,6 +139,38 @@ api.get('/tv/:channel', async (c) => {
     return c.json({ videoId: await liveVideoId(c.req.param('channel')) });
   } catch {
     return c.json({ videoId: null });
+  }
+});
+
+// 有名投資家（13F）・役員・議員の売買
+api.get('/funds', (c) => c.json({ funds: FUNDS, enabled: config().sec }));
+
+api.get('/funds/:cik', async (c) => {
+  try {
+    return c.json(await fundHoldings(c.req.param('cik')));
+  } catch (e) {
+    return c.json({ error: `13F を取得できませんでした（${msg(e)}）` }, 502);
+  }
+});
+
+api.get('/ownership/:symbol', async (c) => {
+  const symbol = c.req.param('symbol').toUpperCase();
+  if (!SYMBOL_RE.test(symbol)) return c.json({ error: 'ティッカーの形式が正しくありません' }, 400);
+  try {
+    return c.json(await ownership(symbol));
+  } catch (e) {
+    return c.json({ error: `保有者のデータを取得できませんでした（${msg(e)}）` }, 502);
+  }
+});
+
+api.get('/congress', async (c) => {
+  const q = c.req.query('symbol')?.toUpperCase();
+  if (q && !SYMBOL_RE.test(q)) return c.json({ error: 'ティッカーの形式が正しくありません' }, 400);
+  if (!config().fmp) return c.json({ error: 'FMP_API_KEY が未設定です' }, 400);
+  try {
+    return c.json({ trades: await congressTrades(q) });
+  } catch (e) {
+    return c.json({ error: `議員の売買を取得できませんでした（${msg(e)}）` }, 502);
   }
 });
 

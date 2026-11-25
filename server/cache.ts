@@ -16,11 +16,12 @@ export function setCacheStore(s: CacheStore | null) {
 /** これより短い TTL は永続ストアに書かない（KV の書き込み回数を節約） */
 const PERSIST_MIN_MS = 30 * 60_000;
 
-export async function cached<T>(key: string, ttlMs: number, fn: () => Promise<T>): Promise<T> {
+/** ttlFor を渡すと、取れた値に応じて保存期間を変えられる（一部しか取れなかったときは短くする など） */
+export async function cached<T>(key: string, ttlMs: number, fn: () => Promise<T>, ttlFor?: (value: T) => number): Promise<T> {
   const now = Date.now();
   const hit = mem.get(key);
   if (hit && hit.exp > now) return hit.value as T;
-  const persist = store && ttlMs >= PERSIST_MIN_MS;
+  let persist = store && ttlMs >= PERSIST_MIN_MS;
   if (persist) {
     try {
       const raw = await store!.get(key);
@@ -36,7 +37,9 @@ export async function cached<T>(key: string, ttlMs: number, fn: () => Promise<T>
     }
   }
   const value = await fn();
+  if (ttlFor) ttlMs = ttlFor(value);
   const entry = { exp: now + ttlMs, value };
+  persist = store && ttlMs >= PERSIST_MIN_MS;
   mem.set(key, entry);
   if (mem.size > 500) mem.delete(mem.keys().next().value!);
   if (persist) {

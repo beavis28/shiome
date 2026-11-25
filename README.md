@@ -44,6 +44,7 @@
 - **Sector heatmap** — about 120 large US stocks (or your watchlist) grouped by sector, sized by market cap and colored by 1-day, 50-day-average or 52-week change.
 - **Rates, commodities, FX** — a market strip under the header, plus a view with US indices and VIX, world indices, Treasury yields with a yield curve, oil, gold, copper, the dollar, FX pairs and crypto (3-month sparklines), and the latest US economic releases (CPI, PCE, jobs, GDP, …) from FRED.
 - **Economic calendar** — CPI, jobs report, PCE, GDP, PPI, retail sales (from FRED) and FOMC decisions, shown in your local time together with your watchlist's earnings dates.
+- **Big-money trades** — what famous investors hold and changed last quarter (Buffett, Ackman, Druckenmiller, Tepper, Cathie Wood, Soros and others, from SEC 13F filings), insider buys and sells (Form 4), the largest institutional holders, and trades reported by members of Congress (via FMP, depending on your plan). All of these are legally required filings published with a delay.
 - **News** for the selected stock.
 - **Live business TV** — a draggable mini player that expands to a large view: Bloomberg Television, Yahoo Finance, NHK WORLD-JAPAN, Sky News and DW News (official YouTube live streams).
 - **Ask AI about the screen** — Claude explains what you are looking at, searches the web with **Exa and Tavily** together when it needs fresh information (with sources), and answers with **charts** (Chart.js: bar, line, area, doughnut, radar, scatter, bubble; three.js: rotatable 3D scatter) and tables. It is instructed never to give buy/sell recommendations, price targets or personal advice.
@@ -66,6 +67,7 @@ Open <http://localhost:5180>. With no keys at all, Shiome still works using Yaho
 | `ANTHROPIC_API_KEY` | [Claude](https://console.anthropic.com): reading tickers from images, the chat panel | Tesseract.js OCR; chat is off |
 | `EXA_API_KEY` | [Exa](https://exa.ai): web search in the chat | Search uses Tavily only (or is off) |
 | `TAVILY_API_KEY` | [Tavily](https://tavily.com): web search in the chat | Search uses Exa only (or is off) |
+| `SEC_USER_AGENT` | Not a key: your name and email, which [SEC EDGAR asks for](https://www.sec.gov/os/accessing-edgar-data) in the User-Agent (e.g. `Shiome Jane Doe jane@example.com`). Used for famous investors' 13F filings | The famous-investor holdings are off |
 
 Keys are read only by the server and never sent to the browser. `DEMO=1` shows made-up demo data without any network calls.
 
@@ -123,6 +125,7 @@ The FOMC schedule in `server/econ.ts` is maintained by hand — update it when t
 - **業界別ヒートマップ** — 主要米国株（約 120 銘柄）またはウォッチリストを業界ごとにまとめ、面積は時価総額、色は 1 日・50 日線乖離・52 週の変化率。
 - **金利・商品・為替** — ヘッダー下の市場の要約バーと、米国・世界の株価指数、VIX、米国債利回りと利回り曲線、原油・金・銅、ドル・主要通貨、暗号資産（約 3 か月の推移付き）、FRED による米国経済指標の最新値（CPI、PCE、雇用、GDP など）。
 - **経済指標カレンダー** — CPI・雇用統計・PCE・GDP・PPI・小売売上高（FRED）と FOMC を、閲覧している場所の時刻で表示。ウォッチリストの決算日もまとめて並べます。
+- **大口の売買** — 有名投資家（バフェット、アックマン、ドラッケンミラー、テッパー、キャシー・ウッド、ソロスなど）の保有と前の期からの増減（SEC の 13F）、役員の売買（Form 4）、大口の保有機関、議員の売買（FMP。プランによる）。どれも法律で決められた届け出で、実際の売買より遅れて公開されます。
 - **ニュース** — 選んだ銘柄の最新ニュース。
 - **経済ニュースのライブ TV** — 小窓（ドラッグで移動）と拡大を切り替えられるプレーヤー。Bloomberg Television、Yahoo Finance、NHK WORLD-JAPAN、Sky News、DW News（YouTube の公式ライブ）。
 - **AI に相談** — 表示中のデータを Claude が解説。最新情報が必要なときは **Exa と Tavily を同時に**使ってウェブ検索し、出典付きで答えます。**図**（Chart.js の棒・折れ線・面・ドーナツ・レーダー・散布図・バブル、three.js の回せる 3D 散布図）や表でも示します。売買の推奨や個別の投資助言はしないよう指示しています。

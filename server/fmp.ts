@@ -6,17 +6,17 @@ const BASE = 'https://financialmodelingprep.com/stable';
 
 class FmpError extends Error {}
 
-async function fmp<T>(endpoint: string, params: Record<string, string>): Promise<T> {
+export async function fmp<T>(endpoint: string, params: Record<string, string>): Promise<T> {
   const key = process.env.FMP_API_KEY;
   if (!key) throw new FmpError('FMP_API_KEY が未設定です');
   const qs = new URLSearchParams({ ...params, apikey: key });
   const res = await fetch(`${BASE}/${endpoint}?${qs}`);
   const text = await res.text();
   if (!res.ok) {
+    if (res.status === 429) throw new FmpError('FMP の 1 日の呼び出し上限に達しました（翌日に戻ります）');
     if (res.status === 402 || /premium|subscription|plan/i.test(text)) {
       throw new FmpError('現在の FMP プランでは取得できません');
     }
-    if (res.status === 429) throw new FmpError('FMP の呼び出し上限に達しました');
     throw new FmpError(`FMP エラー (${res.status})`);
   }
   let json: unknown;

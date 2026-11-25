@@ -8,6 +8,7 @@ import { HeatmapView } from './components/HeatmapView';
 import { MacroView, MarketStrip } from './components/MacroView';
 import { TvPlayer } from './components/TvPlayer';
 import { NewsPanel } from './components/NewsPanel';
+import { FlowsView } from './components/FlowsView';
 import { buildDashboardContext } from './lib/context';
 import { WatchlistTable } from './components/WatchlistTable';
 import { api } from './lib/api';
@@ -15,12 +16,13 @@ import { derive, type Derived, type StockState } from './lib/derive';
 import { DEFAULT_WATCHLIST, loadWatchlist, saveWatchlist } from './lib/watchlist';
 import type { AppConfig, EconPayload, MacroPayload, Prefs, Valuation } from './types';
 
-type MobileTab = 'list' | 'detail' | 'compare' | 'heatmap' | 'macro' | 'news';
+type MobileTab = 'list' | 'detail' | 'compare' | 'heatmap' | 'flows' | 'macro' | 'news';
 const MOBILE_TABS: [MobileTab, string, string][] = [
   ['list', '📋', '銘柄'],
   ['detail', '📈', '詳細'],
   ['compare', '📊', '比較'],
   ['heatmap', '🟩', 'ヒート'],
+  ['flows', '🐋', '大口'],
   ['macro', '🌐', '市場'],
   ['news', '📰', 'ニュース'],
 ];
@@ -91,7 +93,7 @@ export default function App() {
   useEffect(() => writeLS('shiome.tv.open', tvOpen), [tvOpen]);
 
   // 銘柄比較（PER・PSR・時価総額など）
-  const [view, setView] = useState<'detail' | 'compare' | 'heatmap' | 'macro'>('detail');
+  const [view, setView] = useState<'detail' | 'compare' | 'heatmap' | 'flows' | 'macro'>('detail');
   const [macro, setMacro] = useState<MacroPayload | null>(null);
   const [macroError, setMacroError] = useState<string | null>(null);
   // スマホ（幅 767px 以下）は 1 画面ずつ表示し、下のタブで切り替える
@@ -429,6 +431,7 @@ export default function App() {
               ['detail', '📈 詳細'],
               ['compare', '📊 比較'],
               ['heatmap', '🟩 ヒートマップ'],
+              ['flows', '🐋 大口の売買'],
               ['macro', '🌐 金利・商品・為替'],
             ] as const
           ).map(([k, label]) => (
@@ -564,6 +567,17 @@ export default function App() {
                 />
               </div>
             )}
+            {mTab === 'flows' && (
+              <FlowsView
+                symbol={selected}
+                watchlist={symbols}
+                onPick={(sym) => {
+                  if (!symbols.includes(sym)) add([sym]);
+                  setSelected(sym);
+                  setMTab('detail');
+                }}
+              />
+            )}
             {mTab === 'macro' && <MacroView macro={macro} error={macroError} econ={econ} />}
             {mTab === 'news' && (
               <div className="flex flex-col gap-2">
@@ -576,7 +590,7 @@ export default function App() {
               </div>
             )}
           </main>
-          <nav className="fixed inset-x-0 bottom-0 z-30 grid grid-cols-6 border-t border-line bg-panel/95 pb-[env(safe-area-inset-bottom)] backdrop-blur" aria-label="画面の切り替え">
+          <nav className="fixed inset-x-0 bottom-0 z-30 grid grid-cols-7 border-t border-line bg-panel/95 pb-[env(safe-area-inset-bottom)] backdrop-blur" aria-label="画面の切り替え">
             {MOBILE_TABS.map(([k, icon, label]) => (
               <button
                 key={k}
@@ -616,6 +630,16 @@ export default function App() {
           <div className="min-h-0 min-w-0">
             {view === 'macro' ? (
               <MacroView macro={macro} error={macroError} econ={econ} />
+            ) : view === 'flows' ? (
+              <FlowsView
+                symbol={selected}
+                watchlist={symbols}
+                onPick={(sym) => {
+                  if (!symbols.includes(sym)) add([sym]);
+                  setSelected(sym);
+                  setView('detail');
+                }}
+              />
             ) : view === 'heatmap' ? (
               <HeatmapView
                 watchlist={symbols}

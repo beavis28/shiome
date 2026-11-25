@@ -99,6 +99,7 @@ export interface AppConfig {
   anthropic: boolean;
   exa?: boolean;
   tavily?: boolean;
+  sec?: boolean;
 }
 
 export interface OcrTicker {
@@ -223,4 +224,78 @@ export interface Prefs {
   compareSymbols: string[];
   compareMetrics: string[];
   updatedAt: number; // ミリ秒
+}
+
+/** 有名投資家（13F を出すファンド） */
+export interface FundSummary {
+  cik: string;
+  fund: string;
+  manager: string;
+}
+
+export interface FundPosition {
+  cusip: string;
+  name: string; // 13F に書かれた発行体名（略称）
+  ticker: string | null;
+  cls: string;
+  putCall: string | null; // Put / Call（オプション）なら入る
+  value: number; // ドル
+  shares: number;
+  prevShares: number | null;
+  weight: number; // 0.12 = 12%
+  change: 'new' | 'add' | 'reduce' | 'same' | 'sold';
+}
+
+export interface FundHoldings extends FundSummary {
+  reportDate: string; // 対象の四半期末
+  filingDate: string; // 届け出日
+  prevReportDate: string | null;
+  totalValue: number;
+  count: number;
+  positions: FundPosition[]; // 上位 100
+  sold: FundPosition[]; // 前の期から全部売った銘柄
+  complete?: boolean; // ティッカーを調べきれたか
+}
+
+export interface Holder {
+  name: string;
+  reportDate: string | null;
+  pctHeld: number | null;
+  shares: number | null;
+  value: number | null;
+  pctChange: number | null;
+}
+
+/** 役員の売買と大口保有者（Yahoo Finance） */
+export interface Ownership {
+  symbol: string;
+  insiders: {
+    date: string | null;
+    name: string;
+    role: string;
+    text: string;
+    kind: 'buy' | 'sell' | 'gift' | 'grant' | 'exercise' | 'other';
+    shares: number | null;
+    value: number | null;
+  }[];
+  institutions: Holder[];
+  funds: Holder[];
+  insidersPct: number | null;
+  institutionsPct: number | null;
+  institutionsCount: number | null;
+}
+
+/** 議員の売買（STOCK Act の報告） */
+export interface CongressTrade {
+  chamber: 'senate' | 'house';
+  name: string;
+  symbol: string;
+  asset: string;
+  type: string; // Purchase / Sale (Full) / Sale (Partial) / Exchange
+  amount: string; // "$1,001 - $15,000" のような幅
+  owner: string; // 本人 / 配偶者 など
+  transactionDate: string | null;
+  disclosureDate: string | null;
+  district: string;
+  link: string | null;
 }
