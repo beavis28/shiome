@@ -331,6 +331,17 @@ export default function App() {
   // 金利・商品・為替（取引時間中は 1 分、それ以外は 5 分ごと）
   useEffect(() => {
     let alive = true;
+    let retries = 0;
+    let retryTimer: ReturnType<typeof setTimeout> | null = null;
+    // 取れなかった・一部欠けていたときは、次の周期を待たずに 15 秒後に取り直す（3 回まで）
+    const retrySoon = () => {
+      if (retries >= 3 || retryTimer) return;
+      retries++;
+      retryTimer = setTimeout(() => {
+        retryTimer = null;
+        load();
+      }, 15_000);
+    };
     const load = () => {
       if (document.hidden) return;
       api.macro().then(
@@ -338,8 +349,14 @@ export default function App() {
           if (!alive) return;
           setMacro(m);
           setMacroError(null);
+          if (m.warnings.length) retrySoon();
+          else retries = 0;
         },
-        (e) => alive && setMacroError(e instanceof Error ? e.message : String(e)),
+        (e) => {
+          if (!alive) return;
+          setMacroError(e instanceof Error ? e.message : String(e));
+          retrySoon();
+        },
       );
     };
     load();
@@ -347,6 +364,7 @@ export default function App() {
     return () => {
       alive = false;
       clearInterval(id);
+      if (retryTimer) clearTimeout(retryTimer);
     };
   }, [marketActive]);
 

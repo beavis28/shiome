@@ -15,9 +15,18 @@ export async function liveVideoId(channelId: string): Promise<string | null> {
       },
       redirect: 'follow',
     });
-    if (!res.ok) return null;
-    const html = await res.text();
+    const html = res.ok ? await res.text() : '';
     const m = html.match(/<link rel="canonical" href="https:\/\/www\.youtube\.com\/watch\?v=([\w-]{11})"/);
-    return m && /"isLive(?:Now)?":true/.test(html) ? m[1] : null;
-  });
+    const live = /"isLive(?:Now)?":true/.test(html);
+    if (!m || !live) {
+      // 取れなかった理由を調べるためのログ（同意画面・ボット確認・ライブ終了など）
+      console.warn('tv: no live id', channelId, res.status, res.url.slice(0, 80), html.length, {
+        canonical: html.match(/<link rel="canonical" href="([^"]+)"/)?.[1]?.slice(0, 80),
+        consent: /consent\.youtube|before you continue/i.test(html),
+        bot: /not a bot|unusual traffic|captcha/i.test(html),
+        live,
+      });
+    }
+    return m && live ? m[1] : null;
+  }, (v) => (v ? 15 * MIN : 2 * MIN)); // 取れなかったときは早めに取り直す
 }
