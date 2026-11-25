@@ -54,27 +54,86 @@ function writeLS(key: string, value: unknown) {
 
 const SYMBOL_RE = /^[A-Z]{1,5}([.-][A-Z]{1,2})?$/;
 
-function SyncChip({ state }: { state: 'off' | 'loading' | 'synced' | 'saving' | 'error' }) {
-  if (state === 'off') return null;
-  const label = { loading: '同期を確認中', synced: '同期済み', saving: '保存中…', error: '同期できません' }[state];
-  return (
-    <span
-      title="ウォッチリストと比較の設定を、ログインしているメールアドレスごとに保存し、ほかの端末と同期します"
-      className={`rounded px-1.5 py-0.5 text-[10px] ring-1 ring-inset ${state === 'error' ? 'text-downc ring-downc/30' : state === 'synced' ? 'text-sky-300 ring-sky-300/30' : 'text-mute ring-white/10'}`}
-    >
-      ☁ {label}
-    </span>
-  );
-}
+type SyncState = 'off' | 'loading' | 'synced' | 'saving' | 'error';
 
-function StatusChip({ on, label, offText }: { on: boolean | undefined; label: string; offText: string }) {
+/** 接続しているデータ元・同期・ログインを 1 つのボタンにまとめ、クリックで一覧を開く */
+function StatusMenu({ config, sync, me, align = 'right' }: { config: AppConfig | null; sync: SyncState; me: string | null; align?: 'left' | 'right' }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const close = (e: Event) => {
+      if (e instanceof KeyboardEvent ? e.key === 'Escape' : !ref.current?.contains(e.target as Node)) setOpen(false);
+    };
+    window.addEventListener('pointerdown', close);
+    window.addEventListener('keydown', close);
+    return () => {
+      window.removeEventListener('pointerdown', close);
+      window.removeEventListener('keydown', close);
+    };
+  }, [open]);
+
+  const rows: { label: string; on: boolean | undefined; use: string; off: string }[] = [
+    { label: 'Yahoo Finance', on: config ? !config.demo : undefined, use: '株価・チャート・ニュース・保有者', off: 'デモモード' },
+    { label: 'FMP', on: config?.fmp, use: '日足・目標価格・決算日・議員の売買', off: '未設定（Yahoo で代替）' },
+    { label: 'FRED', on: config?.fred, use: '経済指標と発表日', off: '未設定（FOMC だけ表示）' },
+    { label: 'SEC', on: config?.sec, use: '有名投資家の 13F', off: '未設定（SEC_USER_AGENT）' },
+    { label: 'Claude', on: config?.anthropic, use: 'AI に相談・画像の読み取り', off: '未設定（ブラウザ内 OCR）' },
+    { label: 'Exa', on: config?.exa, use: '相談のウェブ検索', off: '未設定' },
+    { label: 'Tavily', on: config?.tavily, use: '相談のウェブ検索', off: '未設定' },
+  ];
+  const offCount = rows.filter((r) => r.on === false).length;
+  const syncLabel = { off: '使えません（ログインしていません）', loading: '確認中…', synced: '同期済み', saving: '保存中…', error: '同期できません' }[sync];
+  const dot = sync === 'error' ? 'bg-downc' : !config ? 'bg-white/30' : offCount ? 'bg-warnc' : 'bg-upc';
+
   return (
-    <span
-      title={on ? `${label}: 設定済み` : `${label}: ${offText}`}
-      className={`rounded px-1.5 py-0.5 text-[10px] ring-1 ring-inset ${on ? 'text-upc ring-upc/30' : 'text-mute ring-white/10'}`}
-    >
-      {label} {on ? '●' : '○'}
-    </span>
+    <div ref={ref} className="relative">
+      <button
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        aria-haspopup="true"
+        className="flex items-center gap-1.5 whitespace-nowrap rounded-md border border-line px-2 py-1 text-[11px] text-mute hover:bg-white/5 hover:text-ink"
+        title="接続しているデータ元と同期の状態"
+      >
+        <i className={`inline-block h-2 w-2 rounded-full ${dot}`} />
+        接続状態
+        {sync === 'saving' || sync === 'loading' ? <span className="text-[10px]">☁…</span> : sync === 'synced' ? <span className="text-[10px] text-sky-300">☁</span> : null}
+        <span className="text-[9px]">▾</span>
+      </button>
+      {open && (
+        <div className={`mt-1 rounded-lg border border-line bg-panel p-1 text-xs ${align === 'right' ? 'absolute right-0 top-full z-50 w-[300px] shadow-2xl' : 'w-full max-w-[360px]'}`}>
+          <p className="px-2.5 pb-1 pt-1.5 text-[10px] font-semibold text-mute">データ元</p>
+          <ul>
+            {rows.map((r) => (
+              <li key={r.label} className="flex items-start gap-2 rounded px-2.5 py-1">
+                <i className={`mt-1 inline-block h-2 w-2 shrink-0 rounded-full ${r.on ? 'bg-upc' : r.on === false ? 'bg-white/20' : 'bg-white/10'}`} />
+                <div className="min-w-0">
+                  <div className={r.on ? 'text-ink' : 'text-mute'}>{r.label}</div>
+                  <div className="text-[10px] text-mute">{r.on === false ? r.off : r.use}</div>
+                </div>
+              </li>
+            ))}
+          </ul>
+          <div className="mt-1 border-t border-line px-2.5 py-1.5">
+            <div className="flex items-center gap-2">
+              <span className={sync === 'error' ? 'text-downc' : sync === 'synced' ? 'text-sky-300' : 'text-mute'}>☁ 端末間の同期</span>
+              <span className="ml-auto text-[10px] text-mute">{syncLabel}</span>
+            </div>
+            <p className="text-[10px] text-mute">ウォッチリストと比較の設定を、ログインしたメールアドレスごとに保存します。</p>
+          </div>
+          {me && (
+            <div className="flex items-center gap-2 border-t border-line px-2.5 py-1.5">
+              <span className="min-w-0 truncate text-[11px] text-mute" title={me}>
+                {me}
+              </span>
+              <a href="/cdn-cgi/access/logout" className="ml-auto shrink-0 rounded border border-line px-2 py-0.5 text-[11px] hover:bg-white/5 hover:text-ink">
+                ログアウト
+              </a>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -446,22 +505,8 @@ export default function App() {
             </button>
           ))}
         </span>
-        <div className="ml-auto flex items-center gap-1.5 max-md:hidden">
-          <StatusChip on={config ? !config.demo : undefined} label="Yahoo" offText="デモモード" />
-          <StatusChip on={config?.fmp} label="FMP" offText="未設定（Yahoo で代替）" />
-          <StatusChip on={config?.fred} label="FRED" offText="未設定" />
-          <StatusChip on={config?.anthropic} label="Claude" offText="未設定（OCR使用）" />
-          <SyncChip state={sync} />
-          {me && (
-            <span className="ml-2 flex items-center gap-2 border-l border-line pl-3 text-[11px] text-mute">
-              <span className="max-w-[180px] truncate" title={me}>
-                {me}
-              </span>
-              <a href="/cdn-cgi/access/logout" className="rounded border border-line px-2 py-0.5 hover:bg-white/5 hover:text-ink">
-                ログアウト
-              </a>
-            </span>
-          )}
+        <div className="ml-auto max-md:hidden">
+          <StatusMenu config={config} sync={sync} me={me} />
         </div>
       </header>
 
@@ -489,20 +534,8 @@ export default function App() {
                   onRemove={remove}
                   onAdd={(s) => add([s])}
                 />
-                <div className="flex flex-wrap items-center gap-1.5 px-1">
-                  <StatusChip on={config ? !config.demo : undefined} label="Yahoo" offText="デモモード" />
-                  <StatusChip on={config?.fmp} label="FMP" offText="未設定（Yahoo で代替）" />
-                  <StatusChip on={config?.fred} label="FRED" offText="未設定" />
-                  <StatusChip on={config?.anthropic} label="Claude" offText="未設定（OCR使用）" />
-          <SyncChip state={sync} />
-                  {me && (
-                    <span className="ml-auto flex items-center gap-2 text-[11px] text-mute">
-                      <span className="max-w-[160px] truncate">{me}</span>
-                      <a href="/cdn-cgi/access/logout" className="rounded border border-line px-2 py-0.5">
-                        ログアウト
-                      </a>
-                    </span>
-                  )}
+                <div className="px-1">
+                  <StatusMenu config={config} sync={sync} me={me} align="left" />
                 </div>
                 <p className="px-1 text-[10px] leading-relaxed text-mute">
                   ⚠ 本アプリは情報提供のみを目的としたもので、投資助言や売買の推奨ではありません。データは遅延・誤りを含む場合があります。投資判断はご自身の責任で行ってください。
