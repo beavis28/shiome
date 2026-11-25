@@ -3,24 +3,62 @@
 import { tx } from './lang.ts';
 import YahooFinance from 'yahoo-finance2';
 import { ExtendedCookieJar } from 'yahoo-finance2/lib/cookieJar';
+import { CookieJar, MemoryCookieStore } from 'tough-cookie';
 import type { AnalystData, Bar, Earnings, HeatItem, NewsItem, PriceTarget, Quote, Valuation } from '../src/types.ts';
 import { MAJOR_SECTOR, SECTOR_JA } from './universe.ts';
-import { cached, HOUR, MIN } from './cache.ts';
+import { cached, HOUR, MIN, storeGet, storePut } from './cache.ts';
 
 import { AsyncLocalStorage } from 'node:async_hooks';
 
-// クッキー置き場（と、それに紐づく認証用の crumb の取得）はリクエストごとに分ける。
-// 既定では全クライアントで 1 つを共有するため、Workers では別のリクエストが始めた crumb の取得を待って止まる
-const newClient = () => new YahooFinance({ suppressNotices: ['yahooSurvey'], cookieJar: new ExtendedCookieJar() });
+// Yahoo は株価以外（quoteSummary など）に「crumb」という認証用の文字列とクッキーを求める。
+// ライブラリの既定では全クライアントで 1 つのクッキー置き場を共有し、crumb の取得も共有されるため、
+// Workers では別のリクエストが始めた取得を待って止まる。かといって毎回取り直すと Yahoo に制限される（429）。
+// そこで、取れたクッキーと crumb を「文字列として」メモリと KV に保存し、リクエストごとに新しい置き場へ読み込む
+const newClient = (jar = new ExtendedCookieJar()) => new YahooFinance({ suppressNotices: ['yahooSurvey'], cookieJar: jar });
 const shared = newClient();
 const perRequest = new AsyncLocalStorage<InstanceType<typeof YahooFinance>>();
 
-/**
- * Workers では、別のリクエストが始めた通信を待つとリクエストが止まる（hung）ため、
- * リクエストごとに Yahoo クライアントを分ける。Node では 1 つを使い回す。
- */
-export function withYahooSession<T>(fn: () => T): T {
-  return perRequest.run(newClient(), fn);
+const JAR_KEY = 'yf:jar:v1';
+const JAR_TTL_SEC = 6 * 3600;
+let jarMemo: { json: string; crumb: string; exp: number } | null = null;
+
+const crumbOf = (data: { cookies?: { key?: string; value?: string }[] } | null) => data?.cookies?.find((c) => c.key === 'crumb')?.value ?? '';
+
+async function loadJar(): Promise<{ jar: ExtendedCookieJar; crumb: string }> {
+  let json = jarMemo && jarMemo.exp > Date.now() ? jarMemo.json : null;
+  if (!json) json = await storeGet(JAR_KEY);
+  const store = new MemoryCookieStore();
+  let crumb = '';
+  if (json) {
+    try {
+      const data = JSON.parse(json);
+      CookieJar.deserializeSync(data, store);
+      crumb = crumbOf(data);
+      if (!jarMemo || jarMemo.json !== json) jarMemo = { json, crumb, exp: Date.now() + JAR_TTL_SEC * 1000 };
+    } catch {
+      /* 壊れていたら取り直す */
+    }
+  }
+  return { jar: new ExtendedCookieJar(store), crumb };
+}
+
+async function saveJar(jar: ExtendedCookieJar, before: string) {
+  const data = jar.serializeSync() as { cookies?: { key?: string; value?: string }[] } | undefined;
+  const crumb = crumbOf(data ?? null);
+  if (!crumb || crumb === before) return; // crumb が新しく取れたときだけ保存する（KV の書き込みを減らす）
+  const json = JSON.stringify(data);
+  jarMemo = { json, crumb, exp: Date.now() + JAR_TTL_SEC * 1000 };
+  await storePut(JAR_KEY, json, JAR_TTL_SEC);
+}
+
+/** Workers 用: リクエストごとに、保存しておいたクッキーと crumb を読み込んだ Yahoo クライアントを使う */
+export async function withYahooSession<T>(fn: () => Promise<T>): Promise<T> {
+  const { jar, crumb } = await loadJar();
+  try {
+    return await perRequest.run(newClient(jar), fn);
+  } finally {
+    await saveJar(jar, crumb).catch(() => {});
+  }
 }
 const client = () => perRequest.getStore() ?? shared;
 

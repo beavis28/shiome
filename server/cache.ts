@@ -54,3 +54,11 @@ export async function cached<T>(key: string, ttlMs: number, fn: () => Promise<T>
 
 export const MIN = 60_000;
 export const HOUR = 60 * MIN;
+
+/** 永続ストアに文字列をそのまま読み書きする（メモリのキャッシュを通さない） */
+export async function storeGet(key: string): Promise<string | null> {
+  return store ? store.get(key).catch(() => null) : null;
+}
+export async function storePut(key: string, value: string, ttlSec: number): Promise<void> {
+  if (store) await store.put(key, value, ttlSec).catch(() => {});
+}
